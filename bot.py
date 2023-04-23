@@ -1,23 +1,4 @@
-#   _____  _                       _   ____        _     _______                   _       _
-#  |  __ \(_)                     | | |  _ \      | |   |__   __|                 | |     | |
-#  | |  | |_ ___  ___ ___  _ __ __| | | |_) | ___ | |_     | | ___ _ __ ___  _ __ | | __ _| |_ ___
-#  | |  | | / __|/ __/ _ \| '__/ _` | |  _ < / _ \| __|    | |/ _ \ '_ ` _ \| '_ \| |/ _` | __/ _ \
-#  | |__| | \__ \ (_| (_) | | | (_| | | |_) | (_) | |_     | |  __/ | | | | | |_) | | (_| | ||  __/
-#  |_____/|_|___/\___\___/|_|  \__,_| |____/ \___/ \__|    |_|\___|_| |_| |_| .__/|_|\__,_|\__\___|
-#                                                                           | |
-#                                                                           |_|
-#
-# Welcome to Raj's Discord Bot Template
-#
-# This template is designed to be a starting point for your own Discord bot.
-# Made by RajDave69 on GitHub.
-#
-#
-# This is the bot.py file. There should be nothing here except for the code that starts the bot.
-# I'd not recommend editing this file, keep it clean and simple. If you want to add more commands, make a new cog.
-#
-#
-
+import asyncio
 import os
 import sys
 from backend import client, discord_token, log, presence
@@ -31,12 +12,13 @@ async def on_ready():
     await client.change_presence(activity=discord.Game(name=presence))
 
 
-# Loading all .py files in ./cogs as bot cogs.
-# If you don't know what a cog is,
-# https://discordpy.readthedocs.io/en/stable/ext/commands/cogs.html
-for file in os.listdir('./cogs'):
-    if file.endswith('.py'):
-        client.load_extension(f'cogs.{file[:-3]}')
+async def load_cogs():
+    for file in os.listdir('./cogs'):
+        if file.endswith('.py'):
+            await client.load_extension(f'cogs.{file[:-3]}')
+
+
+asyncio.run(load_cogs())
 
 
 # Run the actual bot
