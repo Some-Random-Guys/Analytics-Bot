@@ -13,8 +13,12 @@ class Main(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self):
         log.info("Cog: Main.py Loaded")
+        # sync commands
+        # await self.client.tree.sync()
 
-    
+    @app_commands.command()
+    async def topten(self, interaction, amount: int, type_: str = "messages"):
+        await interaction.response.send_message("Hello World!")
 
 
 async def setup(client):
