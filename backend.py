@@ -4,8 +4,9 @@ import discord
 import logging
 from discord.ext import commands
 from colorlog import ColoredFormatter
+from srg_analytics import DbCreds
 
-intents = discord.Intents.default()
+intents = discord.Intents.all()
 
 
 # Initializing the logger
@@ -37,11 +38,17 @@ try:
 
     # Getting the variables from `[secret]`
     discord_token: str = config.get('secret', 'discord_token')
+    db_host: str = config.get('secret', 'db_host')
+    db_port: int = config.getint('secret', 'db_port')
+    db_user: str = config.get('secret', 'db_user')
+    db_password: str = config.get('secret', 'db_password')
+    db_name: str = config.get('secret', 'db_name')
 
     # Getting the variables from `[discord]`
     embed_footer: str = config.get('discord', 'embed_footer')
     embed_color: int = int(config.get('discord', 'embed_color'), base=16)
     embed_url: str = config.get('discord', 'embed_url')
+
 
 
 except Exception as err:
@@ -79,3 +86,5 @@ def error_template(description: str) -> discord.Embed:
 
     return _error_template.copy()
 
+
+db_creds: DbCreds = DbCreds(db_host, db_port, db_user, db_password, db_name)
