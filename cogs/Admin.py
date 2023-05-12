@@ -1,0 +1,41 @@
+from discord.ext import commands
+from backend import log, db_creds
+from srg_analytics import DB
+from discord import app_commands, TextChannel, Member
+from backend import embed_template, error_template, remove_ignore_autocomplete
+
+
+class Admin(commands.GroupCog, name="admin"):
+    def __init__(self, client):
+        self.client = client
+        self.db = DB(db_creds)
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        log.info("Cog: Admin.py Loaded")
+
+    @app_commands.command()
+    async def add_ignore(self, interaction, channel: TextChannel = None, user: Member = None):
+        if user is None:
+            if channel is None:
+                channel = interaction.channel
+
+        if user is not None:
+            await self.db.add_ignore(guild_id=interaction.guild.id, user_id=user.id)
+            await interaction.response.send_message(f"Ignoring {user.mention}", ephemeral=True)
+        elif channel is not None:
+            await self.db.add_ignore(guild_id=interaction.guild.id, channel_id=channel.id)
+            await interaction.response.send_message(f"Ignoring {channel.mention}", ephemeral=True)
+
+    # @app_commands.command()
+    # @app_commands.choices(type_=[
+    #     app_commands.Choice(name="Channel", value="channel"),
+    #     app_commands.Choice(name="User", value="user"),
+    # ])
+    # @app_commands.autocomplete(value_=remove_ignore_autocomplete)
+    # async def remove_ignore(self, interaction, type_: app_commands.Choice[str], value_: str):
+    #     pass
+
+
+async def setup(client):
+    await client.add_cog(Admin(client))
