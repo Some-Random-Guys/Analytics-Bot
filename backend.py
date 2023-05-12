@@ -35,6 +35,10 @@ try:
     # Getting the variables from `[general]`
     log_level: str = config.get('general', 'log_level')
     presence: str = config.get('general', 'presence')
+    owner_ids = config.get('general', 'owner_ids').split(',')
+    owner_ids = [int(i) for i in owner_ids]
+    owner_guilds = config.get('general', 'owner_guilds').split(',')
+    owner_guilds = [int(i) for i in owner_guilds]
 
     # Getting the variables from `[secret]`
     discord_token: str = config.get('secret', 'discord_token')
@@ -48,7 +52,6 @@ try:
     embed_footer: str = config.get('discord', 'embed_footer')
     embed_color: int = int(config.get('discord', 'embed_color'), base=16)
     embed_url: str = config.get('discord', 'embed_url')
-
 
 
 except Exception as err:
