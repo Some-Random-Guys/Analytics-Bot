@@ -122,9 +122,13 @@ class Admin(commands.GroupCog, name="admin"):
 
     @app_commands.command()
     @commands.guild_only()
-    async def add_user_alias(self, interaction, user: Member, alias: Member):
+    async def add_user_alias(self, interaction, user: Member, alias: User):
         await self.db.add_user_alias(guild_id=interaction.guild.id, user_id=user.id, alias_id=alias.id)
         await interaction.response.send_message(f"Added alias {alias} for {user.mention}", ephemeral=True)
+
+    @commands.Cog.listener()
+    async def cog_check(self, ctx):
+        return await is_admin(ctx)
 
 
 async def setup(client):
