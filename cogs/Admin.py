@@ -1,8 +1,10 @@
+import time
+
 from discord.ext import commands
-from backend import log, db_creds
+from backend import log, db_creds, is_admin
 from srg_analytics import DB
 from srg_analytics.schemas import DataTemplate
-from discord import app_commands, TextChannel, Member
+from discord import app_commands, TextChannel, Member, User
 from backend import embed_template, error_template, remove_ignore_autocomplete
 
 
@@ -20,20 +22,27 @@ class Admin(commands.GroupCog, name="admin"):
     async def harvest(self, interaction):
         # go through all channels and add them to the db
         cmd_channel = interaction.channel
+        guild = interaction.guild
 
         channel_ignores = await self.db.get_ignore_list("channel", interaction.guild.id)
         user_ignores = await self.db.get_ignore_list("user", interaction.guild.id)
-
         aliased_users = await self.db.get_user_aliases(guild_id=interaction.guild.id)
         aliases = set([alias for alias_list in aliased_users.values() for alias in alias_list])
 
+        print(channel_ignores)
+        print(user_ignores)
+        print(aliased_users)
+
+        total_msgs = 0
+
         for channel in interaction.guild.text_channels:
-            if channel.id in channel_ignores[channel.guild.id]:
+            start_time = time.time()
+            num_msgs = 0
+            if channel.id in channel_ignores:
                 continue
 
             # for every message in the channel
             async for message in channel.history(limit=None):
-
                 if message.author.id in user_ignores:
                     continue
 
@@ -47,6 +56,8 @@ class Admin(commands.GroupCog, name="admin"):
                             author = alias
                             break
 
+                num_msgs += 1
+
                 msg = DataTemplate(
                     author_id=author,
                     is_bot=message.author.bot,
@@ -55,19 +66,30 @@ class Admin(commands.GroupCog, name="admin"):
                     epoch=message.created_at.timestamp(),
                     num_attachments=len(message.attachments),
                     mentions=",".join(mentions) if mentions else None,
-                    ctx_id=int(message.reference.message_id) if message.reference else None,
+                    ctx_id=int(message.reference.message_id) if message.reference is not None and
+                                                                type(message.reference.message_id) == int else None,
                     message_content=message.content,
                     message_id=message.id
                 )
 
-                await self.db.add_message(msg)
+                await self.db.add_message(guild_id=guild.id, data=msg)
+
+            total_msgs += num_msgs
 
             embed = embed_template()
             embed.title = f"Harvested Channel | " \
                           f"{interaction.guild.text_channels.index(channel) + 1}/{len(interaction.guild.text_channels)}"
-            embed.description = f"Successfully harvested the messages from {channel.mention}"
+            embed.description = f"Successfully harvested the messages in {channel.mention}"
+            embed.add_field(name="Channel", value=f"{channel.mention}", inline=False)
+            embed.add_field(name="Time Taken", value=f"`{round(time.time() - start_time, 4)}s`",
+                            inline=False)  # todo time formatting
+            embed.add_field(name="Total Harvested (Channel)", value=f"`{num_msgs}`", inline=False)
+            embed.add_field(name="Total Harvested (Server)", value=f"`{total_msgs}`", inline=False)
 
-            await cmd_channel.send(embed=embed)
+            try:
+                await cmd_channel.send(embed=embed)
+            except Exception as e:
+                log.error(str(e))
 
         embed = embed_template()
         embed.title = "Harvest Complete"
