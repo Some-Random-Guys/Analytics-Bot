@@ -4,7 +4,7 @@ import discord
 import logging
 from discord.ext import commands
 from colorlog import ColoredFormatter
-from srg_analytics import DbCreds
+from srg_analytics import DbCreds, DB
 
 intents = discord.Intents.all()
 
@@ -91,3 +91,18 @@ def error_template(description: str) -> discord.Embed:
 
 
 db_creds: DbCreds = DbCreds(db_host, db_port, db_user, db_password, db_name)
+
+async def is_admin(interaction) -> bool:
+    if interaction.guild is None:
+        return False
+
+    if interaction.user.id in owner_ids:
+        return True
+
+    if interaction.guild.owner_id == interaction.user.id:
+        return True
+
+    if interaction.user.guild_permissions.administrator:
+        return True
+
+    return False
