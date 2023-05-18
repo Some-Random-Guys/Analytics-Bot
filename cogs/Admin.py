@@ -1,11 +1,16 @@
+import asyncio
 import time
-
 from discord.ext import commands
 from backend import log, db_creds, is_admin
 from srg_analytics import DB
 from srg_analytics.schemas import DataTemplate
 from discord import app_commands, TextChannel, Member, User
 from backend import embed_template, error_template, remove_ignore_autocomplete
+from asyncer import asyncify
+import aiomysql
+import warnings
+
+warnings.filterwarnings('ignore', module=r"aiomysql")
 
 
 class Admin(commands.GroupCog, name="admin"):
@@ -20,81 +25,144 @@ class Admin(commands.GroupCog, name="admin"):
     @app_commands.command()
     @commands.guild_only()
     async def harvest(self, interaction):
-        # go through all channels and add them to the db
         cmd_channel = interaction.channel
-        guild = interaction.guild
 
-        channel_ignores = await self.db.get_ignore_list("channel", interaction.guild.id)
-        user_ignores = await self.db.get_ignore_list("user", interaction.guild.id)
+        channel_ignores = tuple(await self.db.get_ignore_list("channel", interaction.guild.id))
+        user_ignores = tuple(await self.db.get_ignore_list("user", interaction.guild.id))
         aliased_users = await self.db.get_user_aliases(guild_id=interaction.guild.id)
         aliases = set([alias for alias_list in aliased_users.values() for alias in alias_list])
 
-        print(channel_ignores)
-        print(user_ignores)
-        print(aliased_users)
-
         total_msgs = 0
+        total_time = 0
 
-        for channel in interaction.guild.text_channels:
+        db = await aiomysql.create_pool(
+            host=db_creds.host, port=db_creds.port, user=db_creds.user, password=db_creds.password, db=db_creds.name,
+            autocommit=True, loop=self.client.loop
+        )
+
+        query = f"""
+                INSERT IGNORE INTO `{interaction.guild.id}` (author_id, is_bot, has_embed, channel_id, epoch, num_attachments, mentions, ctx_id, message_content, message_id)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+                """
+
+        batch_size = 7
+        concurrent_limit = 7
+        semaphore = asyncio.Semaphore(concurrent_limit)
+
+        # async with db.acquire() as conn:
+        #     async with conn.cursor() as cur:
+        #         await cur.execute(f"SELECT message_id from `{interaction.guild.id}`;")
+        #
+        #         existing_messages = tuple(set([msg[0] for msg in await cur.fetchall()]))
+
+        async def process_messages(channel):
+            nonlocal total_msgs, total_time
+
+            await asyncio.sleep(2)
+
+            msg_data = []
+
+            if channel.id in channel_ignores:
+                return
+
             start_time = time.time()
             num_msgs = 0
-            if channel.id in channel_ignores:
-                continue
 
-            # for every message in the channel
-            async for message in channel.history(limit=None):
-                if message.author.id in user_ignores:
-                    continue
+            async with semaphore:  # Acquire the semaphore before processing
+                async for message in channel.history(limit=None):
+                    # if message.id in existing_messages:
+                    #     continue
+                    if message.author.id in user_ignores:
+                        continue
 
-                mentions = [str(mention.id) for mention in message.mentions]
-                author = message.author.id
+                    mentions = [str(mention.id) for mention in message.mentions]
+                    author = message.author.id
 
-                # if the author is an alias, set author to the alias' id
-                if author in aliases:
-                    for alias, alias_list in aliased_users.items():
-                        if author in alias_list:
-                            author = alias
-                            break
+                    if author in aliases:
+                        for alias, alias_list in aliased_users.items():
+                            if author in alias_list:
+                                author = alias
+                                break
 
-                num_msgs += 1
+                    num_msgs += 1
+                    if num_msgs % 10000 == 0:
+                        log.info(f"Processed {num_msgs} messages")
 
-                msg = DataTemplate(
-                    author_id=author,
-                    is_bot=message.author.bot,
-                    has_embed=len(message.embeds) > 0,
-                    channel_id=message.channel.id,
-                    epoch=message.created_at.timestamp(),
-                    num_attachments=len(message.attachments),
-                    mentions=",".join(mentions) if mentions else None,
-                    ctx_id=int(message.reference.message_id) if message.reference is not None and
-                                                                type(message.reference.message_id) == int else None,
-                    message_content=message.content,
-                    message_id=message.id
-                )
+                    # Create a message data object without saving to the database
+                    msg = (
+                        author,
+                        bool(message.author.bot),
+                        len(message.embeds) > 0,
+                        int(message.channel.id),
+                        int(message.created_at.timestamp()),
+                        len(message.attachments),
+                        ",".join(mentions) if mentions else None,
+                        int(message.reference.message_id) if message.reference is not None and isinstance(
+                            message.reference.message_id, int) else None,
+                        str(message.content),
+                        int(message.id)
+                    )
 
-                await self.db.add_message(guild_id=guild.id, data=msg)
+                    # Collect the message data for batch insertion
+                    msg_data.append(msg)
 
+            elapsed_time = time.time() - start_time
+            total_time += elapsed_time
             total_msgs += num_msgs
 
+            try:
+                # run executemany to insert the batch of messages in a different thread to avoid blocking,
+                # it is a synchronous function
+                async with db.acquire() as conn:
+                    async with conn.cursor() as cur:
+                        await cur.executemany(query, msg_data)
+
+                        # No need to commit since we are using autocommit
+
+            except Exception as e:
+                raise e
+                # log.error(str(e))
+
+            # Send progress embed for the channel
             embed = embed_template()
-            embed.title = f"Harvested Channel | " \
-                          f"{interaction.guild.text_channels.index(channel) + 1}/{len(interaction.guild.text_channels)}"
+            embed.title = f"Harvested Channel | {interaction.guild.text_channels.index(channel) + 1}/{len(interaction.guild.text_channels)}"
             embed.description = f"Successfully harvested the messages in {channel.mention}"
             embed.add_field(name="Channel", value=f"{channel.mention}", inline=False)
-            embed.add_field(name="Time Taken", value=f"`{round(time.time() - start_time, 4)}s`",
-                            inline=False)  # todo time formatting
             embed.add_field(name="Total Harvested (Channel)", value=f"`{num_msgs}`", inline=False)
             embed.add_field(name="Total Harvested (Server)", value=f"`{total_msgs}`", inline=False)
+            embed.add_field(name="Time Taken", value=f"`{elapsed_time:.2f} seconds`", inline=False)
 
             try:
                 await cmd_channel.send(embed=embed)
             except Exception as e:
                 log.error(str(e))
 
+        # Fetch messages from channels in batches
+        tasks = []
+        channels = interaction.guild.text_channels
+
+        # Divide channels into batches
+        channel_batches = [channels[i:i + batch_size] for i in range(0, len(channels), batch_size)]
+
+        for batch in channel_batches:
+            batch_tasks = [process_messages(channel) for channel in batch]
+            tasks.extend(batch_tasks)
+
+        await asyncio.gather(*tasks)
+
+        # Calculate timing statistics
+        total_time_str = f"{total_time:.2f} seconds"
+        msgs_per_sec = total_msgs / total_time
+        msgs_per_100k = msgs_per_sec * 100000
+        per_100k_str = f"{msgs_per_100k:.2f} seconds"
+
+        # Send completion embed
         embed = embed_template()
         embed.title = "Harvest Complete"
         embed.description = f"Successfully harvested all channels in {interaction.guild.name}"
-
+        embed.add_field(name="Total Harvested", value=f"`{total_msgs}`", inline=False)
+        embed.add_field(name="Total Time", value=f"`{total_time_str}`", inline=False)
+        embed.add_field(name="Time per 100,000 Messages", value=f"`{per_100k_str}`", inline=False)
         await cmd_channel.send(embed=embed)
 
     @app_commands.command()
