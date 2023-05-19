@@ -1,3 +1,5 @@
+import bisect
+
 import asyncio
 import time
 from discord.ext import commands
@@ -30,7 +32,7 @@ class Admin(commands.GroupCog, name="admin"):
         channel_ignores = tuple(await self.db.get_ignore_list("channel", interaction.guild.id))
         user_ignores = tuple(await self.db.get_ignore_list("user", interaction.guild.id))
         aliased_users = await self.db.get_user_aliases(guild_id=interaction.guild.id)
-        aliases = set([alias for alias_list in aliased_users.values() for alias in alias_list])
+        aliases = tuple(set([alias for alias_list in aliased_users.values() for alias in alias_list]))
 
         total_msgs = 0
         total_time = 0
@@ -70,8 +72,12 @@ class Admin(commands.GroupCog, name="admin"):
 
             async with semaphore:  # Acquire the semaphore before processing
                 async for message in channel.history(limit=None):
-                    # if message.id in existing_messages:
+                    # e = bisect.bisect_left(existing_messages, message.id)
+
+                    # If the message is already in the database, skip it
+                    # if e != len(existing_messages) and existing_messages[e] == message.id:
                     #     continue
+
                     if message.author.id in user_ignores:
                         continue
 
@@ -86,7 +92,7 @@ class Admin(commands.GroupCog, name="admin"):
 
                     num_msgs += 1
                     if num_msgs % 10000 == 0:
-                        log.info(f"Processed {num_msgs} messages")
+                        log.debug(f"Processed {num_msgs} messages")
 
                     # Create a message data object without saving to the database
                     msg = (
@@ -111,8 +117,6 @@ class Admin(commands.GroupCog, name="admin"):
             total_msgs += num_msgs
 
             try:
-                # run executemany to insert the batch of messages in a different thread to avoid blocking,
-                # it is a synchronous function
                 async with db.acquire() as conn:
                     async with conn.cursor() as cur:
                         await cur.executemany(query, msg_data)
@@ -195,7 +199,7 @@ class Admin(commands.GroupCog, name="admin"):
         await interaction.response.send_message(f"Added alias {alias} for {user.mention}", ephemeral=True)
 
     @commands.Cog.listener()
-    async def cog_check(self, ctx):
+    async def check(self, ctx):
         return await is_admin(ctx)
 
 
