@@ -198,6 +198,19 @@ class Admin(commands.GroupCog, name="admin"):
         await self.db.add_user_alias(guild_id=interaction.guild.id, user_id=user.id, alias_id=alias.id)
         await interaction.response.send_message(f"Added alias {alias} for {user.mention}", ephemeral=True)
 
+    @app_commands.command()
+    async def show_aliases(self, interaction, user: Member = None):
+        if user is None:
+            user = interaction.user
+
+        aliases = await self.db.get_user_aliases(guild_id=interaction.guild.id, user_id=user.id)
+
+        embed = embed_template()
+        embed.title = f"Aliases for {user}"
+        embed.description = f"Aliases: {', '.join([f'{alias.mention}' for alias in aliases])}"
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
     @commands.Cog.listener()
     async def check(self, ctx):
         return await is_admin(ctx)
