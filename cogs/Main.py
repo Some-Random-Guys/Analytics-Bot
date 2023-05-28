@@ -49,14 +49,15 @@ class Main(commands.Cog):
         await interaction.response.defer()
 
         embed = embed_template()
-        embed.title = f"Top {amount} {category.value.capitalize()}"
+        embed.title = f"Top {amount} {type_}"
 
         if type_.value == "channel":
-            pass
+            res = await get_top_channels_visual(self.db, interaction.guild.id, self.client, category.value, amount)
+            embed.description = f"Top {amount} channels in this guild"
 
         elif type_.value == "user":
             res = await get_top_users_visual(self.db, interaction.guild.id, self.client, category.value, amount)
-            embed.description = f"Top {amount} users by in this guild"
+            embed.description = f"Top {amount} users in this guild"
 
         embed.set_image(url="attachment://image.png")
 
