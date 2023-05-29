@@ -3,7 +3,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from backend import db_creds
-from srg_analytics import wordcloud, DB, get_top_users_visual
+from srg_analytics import wordcloud, DB, get_top_users_visual, get_top_channels_visual
 
 # Importing our custom variables/functions from backend.py
 from backend import log, embed_template, error_template
