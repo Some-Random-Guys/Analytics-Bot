@@ -3,7 +3,8 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from backend import db_creds
-from srg_analytics import wordcloud, DB, get_top_users_visual, get_top_channels_visual
+from srg_analytics import wordcloud, DB, get_top_users_visual, get_top_channels_visual, export_html, build_profile, \
+    Profile
 
 # Importing our custom variables/functions from backend.py
 from backend import log, embed_template, error_template
@@ -44,6 +45,7 @@ class Main(commands.Cog):
         app_commands.Choice(name="Words", value="words"),
         app_commands.Choice(name="Characters", value="characters"),
     ])
+    @app_commands.rename(type_='type')
     async def top(self, interaction, type_: app_commands.Choice[str], category: app_commands.Choice[str],
                   amount: int = 10):
         await interaction.response.defer()
@@ -66,6 +68,40 @@ class Main(commands.Cog):
         await interaction.followup.send(embed=embed, file=discord.File(res, filename="image.png"))
 
         os.remove(res)
+
+    @app_commands.command()
+    @app_commands.choices(export_format=[
+        app_commands.Choice(name="HTML", value="html"),
+        # app_commands.Choice(name="JSON", value="json"),
+    ])
+    async def export(self, interation, channel: discord.TextChannel,
+                     export_format: app_commands.Choice[str], message_limit: int = None):
+
+        # Return if the user is not an admin
+        if not interation.user.guild_permissions.administrator:
+            await interation.response.send_message(
+                embed=error_template("You must be an admin to use this command"),
+                ephemeral=True
+            )
+            return
+
+        await interation.response.defer()
+
+        # HTML Export
+        if export_format.value == "html":
+            # Get the file from package
+            file = await export_html(client=self.client, channel=channel, limit=message_limit)
+
+            # Create embed
+            embed = embed_template()
+            embed.title = "Exported HTML"
+            embed.description = f"Here is the exported HTML file for {channel.mention}"
+            embed.set_image(url=f"attachment://export.html")
+
+            # Send the embed and file
+            await interation.followup.send(
+                embed=embed, file=discord.File(file, filename=f"{channel.id}.html")
+            )
 
     # error handler
     @commands.Cog.listener()
