@@ -22,7 +22,10 @@ class Activity(commands.GroupCog, name="activity"):
     # ])
     async def activity_user(self, interation, timeperiod: int):
         await interation.response.defer()
+
         db = DB(db_creds)
+        await db.connect()
+
         e = await activity_guild_visual(db=db, guild_id=interation.guild.id, time_period=timeperiod)
 
         embed = embed_template()

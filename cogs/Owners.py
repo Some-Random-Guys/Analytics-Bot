@@ -7,7 +7,6 @@ from backend import log, embed_template, error_template, db_creds, owner_ids, ow
 class Owners(commands.GroupCog, group_name="owners"): # TODO use owner_guilds to restrict commands to owner guilds
     def __init__(self, client):
         self.client = client
-        self.db = DB(db_creds)
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -65,7 +64,10 @@ class Owners(commands.GroupCog, group_name="owners"): # TODO use owner_guilds to
         if interation.user.id not in owner_ids:
             return
 
-        await self.db.add_guild(guild_id)
+        db = DB(db_creds)
+        await db.connect()
+
+        await db.add_guild(guild_id)
 
         await interation.response.send_message(f"Added guild {guild_id}", ephemeral=True)
 
@@ -74,7 +76,10 @@ class Owners(commands.GroupCog, group_name="owners"): # TODO use owner_guilds to
         if interation.user.id not in owner_ids:
             return
 
-        await self.db.remove_guild(guild_id)
+        db = DB(db_creds)
+        await db.connect()
+
+        await db.remove_guild(guild_id)
 
         await interation.response.send_message(f"Removed guild {guild_id}", ephemeral=True)
 

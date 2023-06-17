@@ -1,15 +1,10 @@
-import bisect
-
 import asyncio
 import time
 from discord.ext import commands
 from backend import log, db_creds, is_admin
 from srg_analytics import DB
-from srg_analytics.schemas import DataTemplate
 from discord import app_commands, TextChannel, Member, User
-from backend import embed_template, error_template, remove_ignore_autocomplete
-from asyncer import asyncify
-import aiomysql
+from backend import embed_template, error_template  # , remove_ignore_autocomplete
 import warnings
 
 warnings.filterwarnings('ignore', module=r"aiomysql")
@@ -18,7 +13,6 @@ warnings.filterwarnings('ignore', module=r"aiomysql")
 class Admin(commands.GroupCog, name="admin"):
     def __init__(self, client):
         self.client = client
-        self.db = DB(db_creds)
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -28,19 +22,16 @@ class Admin(commands.GroupCog, name="admin"):
     @commands.guild_only()
     async def harvest(self, interaction):
         cmd_channel = interaction.channel
+        db = DB(db_creds)
+        await db.connect()
 
-        channel_ignores = tuple(await self.db.get_ignore_list("channel", interaction.guild.id))
-        user_ignores = tuple(await self.db.get_ignore_list("user", interaction.guild.id))
-        aliased_users = await self.db.get_user_aliases(guild_id=interaction.guild.id)
+        channel_ignores = tuple(await db.get_ignore_list("channel", interaction.guild.id))
+        user_ignores = tuple(await db.get_ignore_list("user", interaction.guild.id))
+        aliased_users = await db.get_user_aliases(guild_id=interaction.guild.id)
         aliases = tuple(set([alias for alias_list in aliased_users.values() for alias in alias_list]))
 
         total_msgs = 0
         total_time = 0
-
-        db = await aiomysql.create_pool(
-            host=db_creds.host, port=db_creds.port, user=db_creds.user, password=db_creds.password, db=db_creds.name,
-            autocommit=True, loop=self.client.loop
-        )
 
         query = f"""
                 INSERT IGNORE INTO `{interaction.guild.id}` (author_id, is_bot, has_embed, channel_id, epoch, num_attachments, mentions, ctx_id, message_content, message_id)
@@ -117,7 +108,7 @@ class Admin(commands.GroupCog, name="admin"):
             total_msgs += num_msgs
 
             try:
-                async with db.acquire() as conn:
+                async with db.con.acquire() as conn:
                     async with conn.cursor() as cur:
                         await cur.executemany(query, msg_data)
 
@@ -172,15 +163,19 @@ class Admin(commands.GroupCog, name="admin"):
     @app_commands.command()
     @commands.guild_only()
     async def add_ignore(self, interaction, channel: TextChannel = None, user: Member = None):
+
+        db = DB(db_creds)
+        await db.connect()
+
         if user is None:
             if channel is None:
                 channel = interaction.channel
 
         if user is not None:
-            await self.db.add_ignore(guild_id=interaction.guild.id, user_id=user.id)
+            await db.add_ignore(guild_id=interaction.guild.id, user_id=user.id)
             await interaction.response.send_message(f"Ignoring {user.mention}", ephemeral=True)
         elif channel is not None:
-            await self.db.add_ignore(guild_id=interaction.guild.id, channel_id=channel.id)
+            await db.add_ignore(guild_id=interaction.guild.id, channel_id=channel.id)
             await interaction.response.send_message(f"Ignoring {channel.mention}", ephemeral=True)
 
     # @app_commands.command()
@@ -195,7 +190,10 @@ class Admin(commands.GroupCog, name="admin"):
     @app_commands.command()
     @commands.guild_only()
     async def add_user_alias(self, interaction, user: Member, alias: User):
-        await self.db.add_user_alias(guild_id=interaction.guild.id, user_id=user.id, alias_id=alias.id)
+        db = DB(db_creds)
+        await db.connect()
+
+        await db.add_user_alias(guild_id=interaction.guild.id, user_id=user.id, alias_id=alias.id)
         await interaction.response.send_message(f"Added alias {alias} for {user.mention}", ephemeral=True)
 
     @app_commands.command()
@@ -203,7 +201,10 @@ class Admin(commands.GroupCog, name="admin"):
         if user is None:
             user = interaction.user
 
-        aliases = await self.db.get_user_aliases(guild_id=interaction.guild.id, user_id=user.id)
+        db = DB(db_creds)
+        await db.connect()
+
+        aliases = await db.get_user_aliases(guild_id=interaction.guild.id, user_id=user.id)
 
         embed = embed_template()
         embed.title = f"Aliases for {user}"
