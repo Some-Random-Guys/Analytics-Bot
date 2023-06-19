@@ -114,18 +114,21 @@ class Main(commands.Cog):
         db = DB(db_creds)
         await db.connect()
 
+        if not member:
+            member = interaction.user
+
         # Get the file from package
         profile: Profile = await build_profile(db=db, guild_id=interaction.guild.id, user_id=member.id)
 
         # Create embed
         embed = embed_template()
         embed.title = f"Profile for {member}"
-        embed.description = f"Here is the profile for {member.mention}"
+        embed.description = f"Here is the profile for {member.mention}. Took {round(profile.time_taken, 2)} seconds to generate."
 
         embed.add_field(name="Messages", value=profile.messages, inline=False)
         embed.add_field(name="Words", value=profile.words, inline=False)
         embed.add_field(name="Characters", value=profile.characters, inline=False)
-        embed.add_field(name="Average Message Length", value=f"{profile.average_msg_length} Characters", inline=False)
+        embed.add_field(name="Average Message Length", value=f"{round(profile.average_msg_length, 2)} Characters", inline=False)
         embed.add_field(name="Top Words", value=str(profile.top_words), inline=False)
 
         await interaction.followup.send(embed=embed)
