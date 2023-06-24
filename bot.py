@@ -9,6 +9,7 @@ import discord.utils
 @client.event
 async def on_ready():
     log.info(f"Bot is ready. Logged in as {client.user}")
+    log.info("Ping: " + str(round(client.latency * 1000, 2)) + "ms")
     await client.change_presence(activity=discord.Game(name=presence))
 
 

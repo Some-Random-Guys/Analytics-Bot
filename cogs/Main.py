@@ -40,8 +40,8 @@ class Main(commands.Cog):
 
     @app_commands.command(name="top")
     @app_commands.choices(type_=[
-        app_commands.Choice(name="Channel", value="channel"),
         app_commands.Choice(name="User", value="user"),
+        app_commands.Choice(name="Channel", value="channel"),
     ])
     @app_commands.choices(category=[
         app_commands.Choice(name="Messages", value="messages"),
@@ -51,9 +51,15 @@ class Main(commands.Cog):
     @app_commands.rename(type_='type')
     async def top(self, interaction, type_: app_commands.Choice[str], category: app_commands.Choice[str],
                   amount: int = 10):
+
         await interaction.response.defer()
+
         db: DB = DB(db_creds)
         await db.connect()
+
+        # if amount isnt in the range 1-20, set it to 10
+        if not 1 < amount < 21:
+            amount = 10
 
         embed = embed_template()
         embed.title = f"Top {amount} {type_.name}s"
@@ -65,6 +71,9 @@ class Main(commands.Cog):
         elif type_.value == "user":
             res = await get_top_users_visual(db, interaction.guild.id, self.client, category.value, amount)
             embed.description = f"Top {amount} users in this guild"
+
+        else:
+            return
 
         embed.set_image(url="attachment://image.png")
 
@@ -130,6 +139,10 @@ class Main(commands.Cog):
         embed.add_field(name="Characters", value=profile.characters, inline=False)
         embed.add_field(name="Average Message Length", value=f"{round(profile.average_msg_length, 2)} Characters", inline=False)
         embed.add_field(name="Top Words", value=str(profile.top_words), inline=False)
+        embed.add_field(name="Total Attachments", value=profile.total_attachments, inline=False)
+        if member.bot:
+            embed.add_field(name="Total Embeds", value=profile.total_embeds, inline=False)
+        # embed.add_field(name="Top Emojis", value=str(profile.top_emojis), inline=False)
 
         await interaction.followup.send(embed=embed)
 
