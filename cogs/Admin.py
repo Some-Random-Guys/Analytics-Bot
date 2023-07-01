@@ -162,7 +162,7 @@ class Admin(commands.GroupCog, name="admin"):
 
     @app_commands.command()
     @commands.guild_only()
-    async def add_ignore(self, interaction, channel: TextChannel = None, user: Member = None):
+    async def add_ignore(self, interaction, channel: TextChannel = None, user: Member = None, update_existing: bool = False):
 
         db = DB(db_creds)
         await db.connect()
@@ -172,10 +172,10 @@ class Admin(commands.GroupCog, name="admin"):
                 channel = interaction.channel
 
         if user is not None:
-            await db.add_ignore(guild_id=interaction.guild.id, user_id=user.id)
+            await db.add_ignore(guild_id=interaction.guild.id, user_id=user.id, update_existing=update_existing)
             await interaction.response.send_message(f"Ignoring {user.mention}", ephemeral=True)
         elif channel is not None:
-            await db.add_ignore(guild_id=interaction.guild.id, channel_id=channel.id)
+            await db.add_ignore(guild_id=interaction.guild.id, channel_id=channel.id, update_existing=update_existing)
             await interaction.response.send_message(f"Ignoring {channel.mention}", ephemeral=True)
 
     # @app_commands.command()
@@ -189,12 +189,12 @@ class Admin(commands.GroupCog, name="admin"):
 
     @app_commands.command()
     @commands.guild_only()
-    async def add_user_alias(self, interaction, user: Member, alias: User):
+    async def add_user_alias(self, interaction, user: Member, alias: User, update_existing: bool = True):
         db = DB(db_creds)
         await db.connect()
 
-        await db.add_user_alias(guild_id=interaction.guild.id, user_id=user.id, alias_id=alias.id)
-        await interaction.response.send_message(f"Added alias {alias} for {user.mention}", ephemeral=True)
+        await db.add_user_alias(guild_id=interaction.guild.id, user_id=user.id, alias_id=alias.id, update_existing=update_existing)
+        await interaction.response.send_message(f"Added alias {alias} for {user.mention}", ephemeral=update_existing)
 
     @app_commands.command()
     async def show_aliases(self, interaction, user: Member = None):
