@@ -153,7 +153,7 @@ class Activity(commands.GroupCog, name="activity"):
                                        time_period=timeperiod.value, timezone=timezone)
 
         embed = embed_template()
-        embed.title = f"Activity for TODO"
+        embed.title = f"Activity for {', '.join([user[0] for user in user_list])}"
         embed.description = f"Showing activity for the last {timeperiod.value}"
         embed.set_image(url="attachment://activity.png")
 
