@@ -39,7 +39,7 @@ class Admin(commands.GroupCog, name="admin"):
                 INSERT IGNORE INTO `{interaction.guild_id}` (message_id, channel_id, author_id, aliased_author_id, message_content, epoch, 
                 edit_epoch, is_bot, has_embed, num_attachments, ctx_id, user_mentions, channel_mentions, role_mentions, reactions)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
-            """,
+            """
 
         batch_size = 7
         concurrent_limit = 7
@@ -96,22 +96,24 @@ class Admin(commands.GroupCog, name="admin"):
 
                     # Create a message data object without saving to the database
                     msg = (
-                        message.id, # message_id
-                        message.author.id, # author_id
-                        author, # aliased_author_id
+                        int(message.id), # message_id
+                        int(message.channel.id),  # channel_id
+                        int(message.author.id),  # author_id
+                        int(author), # aliased_author_id
                         str(message.content),   # message_content
                         int(message.created_at.timestamp()), # epoch
                         int(message.edited_at.timestamp()) if message.edited_at is not None else None, # edit_epoch
-                        message.author.bot, # is_bot
-                        message.embeds != [], # has_embed
+                        int(message.author.bot), # is_bot
+                        bool(message.embeds != []), # has_embed
                         len(message.attachments),   # num_attachments
                         int(message.reference.message_id) if message.reference is not None and isinstance(
                             message.reference.message_id, int) else None,   # ctx_id
                         None if message.raw_mentions == [] else str(message.raw_mentions), # user_mentions
                         None if message.raw_channel_mentions == [] else str(message.raw_channel_mentions), # channel_mentions
                         None if message.raw_role_mentions == [] else str(message.raw_role_mentions), # role_mentions
-                        str(reactions) # reactions
+                        None if str(reactions) == {} else str(reactions)  # reactions
                     )
+                    # print(msg)
 
                     # Collect the message data for batch insertion
                     msg_data.append(msg)
@@ -123,6 +125,7 @@ class Admin(commands.GroupCog, name="admin"):
             try:
                 async with db.con.acquire() as conn:
                     async with conn.cursor() as cur:
+                        # print(msg_data[-1])
                         await cur.executemany(query, msg_data)
 
                         # No need to commit since we are using autocommit
