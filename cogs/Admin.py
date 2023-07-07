@@ -1,5 +1,7 @@
 import asyncio
 import time
+
+import discord
 from discord.ext import commands
 from backend import log, db_creds, is_admin
 from srg_analytics import DB
@@ -34,9 +36,10 @@ class Admin(commands.GroupCog, name="admin"):
         total_time = 0
 
         query = f"""
-                INSERT IGNORE INTO `{interaction.guild.id}` (author_id, is_bot, has_embed, channel_id, epoch, num_attachments, mentions, ctx_id, message_content, message_id)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
-                """
+                INSERT IGNORE INTO `{interaction.guild_id}` (message_id, channel_id, author_id, aliased_author_id, message_content, epoch, 
+                edit_epoch, is_bot, has_embed, num_attachments, ctx_id, user_mentions, channel_mentions, role_mentions, reactions)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+            """,
 
         batch_size = 7
         concurrent_limit = 7
@@ -72,7 +75,6 @@ class Admin(commands.GroupCog, name="admin"):
                     if message.author.id in user_ignores:
                         continue
 
-                    mentions = [str(mention.id) for mention in message.mentions]
                     author = message.author.id
 
                     if author in aliases:
@@ -81,23 +83,34 @@ class Admin(commands.GroupCog, name="admin"):
                                 author = alias
                                 break
 
+                    reactions = {}
+
+                    for reaction in message.reactions:
+                        key = reaction.emoji.id if reaction.is_custom_emoji() else reaction.emoji
+                        print(key)
+                        reactions[key] = [user.id async for user in reaction.users()]
+
                     num_msgs += 1
                     if num_msgs % 10000 == 0:
                         log.debug(f"Processed {num_msgs} messages")
 
                     # Create a message data object without saving to the database
                     msg = (
-                        author,
-                        bool(message.author.bot),
-                        len(message.embeds) > 0,
-                        int(message.channel.id),
-                        int(message.created_at.timestamp()),
-                        len(message.attachments),
-                        ",".join(mentions) if mentions else None,
+                        message.id, # message_id
+                        message.author.id, # author_id
+                        author, # aliased_author_id
+                        str(message.content),   # message_content
+                        int(message.created_at.timestamp()), # epoch
+                        int(message.edited_at.timestamp()) if message.edited_at is not None else None, # edit_epoch
+                        message.author.bot, # is_bot
+                        message.embeds != [], # has_embed
+                        len(message.attachments),   # num_attachments
                         int(message.reference.message_id) if message.reference is not None and isinstance(
-                            message.reference.message_id, int) else None,
-                        str(message.content),
-                        int(message.id)
+                            message.reference.message_id, int) else None,   # ctx_id
+                        None if message.raw_mentions == [] else str(message.raw_mentions), # user_mentions
+                        None if message.raw_channel_mentions == [] else str(message.raw_channel_mentions), # channel_mentions
+                        None if message.raw_role_mentions == [] else str(message.raw_role_mentions), # role_mentions
+                        str(reactions) # reactions
                     )
 
                     # Collect the message data for batch insertion
