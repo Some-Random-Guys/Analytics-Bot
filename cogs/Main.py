@@ -149,8 +149,14 @@ class Main(commands.Cog):
     # error handler
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error: discord.DiscordException):
-        log.error(error)
+        # if it's command is not found, skip
+        if isinstance(error, commands.CommandNotFound):
+            return
 
+    # app command error handler
+    @commands.Cog.listener()
+    async def on_application_command_error(self, ctx, error: discord.DiscordException):
+        log.error(error)
 
 async def setup(client):
     await client.add_cog(Main(client))
