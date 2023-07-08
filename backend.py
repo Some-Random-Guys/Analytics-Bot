@@ -1,12 +1,19 @@
+import asyncio
 import configparser
 import sys
+import threading
+
 import discord
 import logging
 from discord.ext import commands
 from colorlog import ColoredFormatter
 from srg_analytics import DbCreds, DB
 
-intents = discord.Intents.all()
+intents = discord.Intents()
+intents.message_content = True
+intents.guilds = True
+intents.members = True
+
 
 
 # Initializing the logger
@@ -106,3 +113,38 @@ async def is_admin(interaction) -> bool:
         return True
 
     return False
+
+
+# Confirm Button Discord View
+class ConfirmButton(discord.ui.View):  # Confirm Button Class
+    def __init__(self, author):
+        super().__init__()
+        self.value = None
+        self.author = author
+
+    @discord.ui.button(label="Confirm", style=discord.ButtonStyle.red)
+    async def confirm_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not interaction.user.id == self.author.id:
+            await interaction.response.send_message("This button is not for you", ephemeral=True)
+            return
+
+        self.value = True
+
+        for child in self.children:  # Disable all buttons
+            child.disabled = True
+
+        await interaction.response.send_message(view=self)
+        self.stop()
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.grey)
+    async def cancel_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not interaction.user.id == self.author.id:
+            return await interaction.response.send_message("This button is not for you", ephemeral=True)
+
+        self.value = False
+
+        for child in self.children:
+            child.disabled = True
+
+        await interaction.response.edit_original_message(view=self)
+        self.stop()
