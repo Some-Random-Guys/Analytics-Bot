@@ -20,9 +20,10 @@ class Admin(commands.GroupCog, name="admin"):
     async def on_ready(self):
         log.info("Cog: Admin.py Loaded")
 
+
     @app_commands.command()
     @commands.guild_only()
-    async def harvest(self, interaction):
+    async def harvest(self, interaction, channel: discord.TextChannel = None):
         cmd_channel = interaction.channel
         db = DB(db_creds)
         await db.connect()
@@ -41,86 +42,85 @@ class Admin(commands.GroupCog, name="admin"):
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
             """
 
-        batch_size = 7
-        concurrent_limit = 7
-        semaphore = asyncio.Semaphore(concurrent_limit)
-
-        # async with db.acquire() as conn:
-        #     async with conn.cursor() as cur:
-        #         await cur.execute(f"SELECT message_id from `{interaction.guild.id}`;")
-        #
-        #         existing_messages = tuple(set([msg[0] for msg in await cur.fetchall()]))
-
-        async def process_messages(channel):
+        async def process_channel(channel):
+            start = time.time()
             nonlocal total_msgs, total_time
+            channel_msgs = 0
 
-            await asyncio.sleep(2)
+            messages = []
+            tasks = []
 
+            async for message in channel.history(limit=None):
+                if message.author.id in user_ignores:
+                    continue
+                if message.channel.id in channel_ignores:
+                    continue
+
+                messages.append(message)
+
+                if len(messages) == 10000:
+                    channel_msgs += len(messages)
+                    tasks.append(process_messages(messages))
+                    print("V")
+
+                    messages = []
+
+            channel_msgs += len(messages)
+            total_msgs += channel_msgs
+            tasks.append(process_messages(messages))
+            await asyncio.gather(*tasks)
+
+            embed = embed_template()
+            embed.title = f"Harvested {channel.name} | {len(tasks)} tasks"
+            embed.description = f"Harvested messages in {channel.name} in {time.time() - start} seconds"
+            embed.add_field(name="Total Messages", value=total_msgs)
+            embed.add_field(name="Channel Messages", value=channel_msgs)
+            await cmd_channel.send(embed=embed)
+
+            print(f"Took {time.time() - start} seconds to process {channel.name}")
+
+        async def get_reactions(reaction):
+            return [user.id async for user in reaction.users()]
+
+        async def process_messages(messages):
+            start = time.time()
             msg_data = []
 
-            if channel.id in channel_ignores:
-                return
+            for message in messages:
+                author = message.author.id
 
-            start_time = time.time()
-            num_msgs = 0
+                if author in aliases:
+                    for alias, alias_list in aliased_users.items():
+                        if author in alias_list:
+                            author = alias
+                            break
 
-            async with semaphore:  # Acquire the semaphore before processing
-                async for message in channel.history(limit=None):
-                    # e = bisect.bisect_left(existing_messages, message.id)
+                reactions = {}
 
-                    # If the message is already in the database, skip it
-                    # if e != len(existing_messages) and existing_messages[e] == message.id:
-                    #     continue
+                for reaction in message.reactions:
+                    key = reaction.emoji.id if reaction.is_custom_emoji() else reaction.emoji
+                    reactions[key] = await get_reactions(reaction)
 
-                    if message.author.id in user_ignores:
-                        continue
+                msg = (
+                    int(message.id),
+                    int(message.channel.id),
+                    int(message.author.id),
+                    int(author),
+                    str(message.content),
+                    int(message.created_at.timestamp()),
+                    int(message.edited_at.timestamp()) if message.edited_at is not None else None,
+                    int(message.author.bot),
+                    bool(message.embeds != []),
+                    len(message.attachments),
+                    int(message.reference.message_id) if message.reference is not None and isinstance(
+                        message.reference.message_id, int) else None,
+                    None if message.raw_mentions == [] else str(message.raw_mentions),
+                    None if message.raw_channel_mentions == [] else str(message.raw_channel_mentions),
+                    None if message.raw_role_mentions == [] else str(message.raw_role_mentions),
+                    None if str(reactions) == {} else str(reactions)
+                )
 
-                    author = message.author.id
-
-                    if author in aliases:
-                        for alias, alias_list in aliased_users.items():
-                            if author in alias_list:
-                                author = alias
-                                break
-
-                    reactions = {}
-
-                    for reaction in message.reactions:
-                        key = reaction.emoji.id if reaction.is_custom_emoji() else reaction.emoji
-                        print(key)
-                        reactions[key] = [user.id async for user in reaction.users()]
-
-                    num_msgs += 1
-                    if num_msgs % 10000 == 0:
-                        log.debug(f"Processed {num_msgs} messages")
-
-                    # Create a message data object without saving to the database
-                    msg = (
-                        int(message.id), # message_id
-                        int(message.channel.id),  # channel_id
-                        int(message.author.id),  # author_id
-                        int(author), # aliased_author_id
-                        str(message.content),   # message_content
-                        int(message.created_at.timestamp()), # epoch
-                        int(message.edited_at.timestamp()) if message.edited_at is not None else None, # edit_epoch
-                        int(message.author.bot), # is_bot
-                        bool(message.embeds != []), # has_embed
-                        len(message.attachments),   # num_attachments
-                        int(message.reference.message_id) if message.reference is not None and isinstance(
-                            message.reference.message_id, int) else None,   # ctx_id
-                        None if message.raw_mentions == [] else str(message.raw_mentions), # user_mentions
-                        None if message.raw_channel_mentions == [] else str(message.raw_channel_mentions), # channel_mentions
-                        None if message.raw_role_mentions == [] else str(message.raw_role_mentions), # role_mentions
-                        None if str(reactions) == {} else str(reactions)  # reactions
-                    )
-                    # print(msg)
-
-                    # Collect the message data for batch insertion
-                    msg_data.append(msg)
-
-            elapsed_time = time.time() - start_time
-            total_time += elapsed_time
-            total_msgs += num_msgs
+                msg_data.append(msg)
 
             try:
                 async with db.con.acquire() as conn:
@@ -132,49 +132,45 @@ class Admin(commands.GroupCog, name="admin"):
 
             except Exception as e:
                 raise e
-                # log.error(str(e))
 
-            # Send progress embed for the channel
-            embed = embed_template()
-            embed.title = f"Harvested Channel | {interaction.guild.text_channels.index(channel) + 1}/{len(interaction.guild.text_channels)}"
-            embed.description = f"Successfully harvested the messages in {channel.mention}"
-            embed.add_field(name="Channel", value=f"{channel.mention}", inline=False)
-            embed.add_field(name="Total Harvested (Channel)", value=f"`{num_msgs}`", inline=False)
-            embed.add_field(name="Total Harvested (Server)", value=f"`{total_msgs}`", inline=False)
-            embed.add_field(name="Time Taken", value=f"`{elapsed_time:.2f} seconds`", inline=False)
+            print(f"Took {time.time() - start} seconds to process {len(messages)} messages")
 
-            try:
-                await cmd_channel.send(embed=embed)
-            except Exception as e:
-                log.error(str(e))
+        if channel:
+            await process_channel(channel)
 
-        # Fetch messages from channels in batches
-        tasks = []
-        channels = interaction.guild.text_channels
+        else:
+            tasks = []
+            for channel in interaction.guild.text_channels:
+                tasks.append(process_channel(channel))
 
-        # Divide channels into batches
-        channel_batches = [channels[i:i + batch_size] for i in range(0, len(channels), batch_size)]
+            await asyncio.gather(*tasks)
 
-        for batch in channel_batches:
-            batch_tasks = [process_messages(channel) for channel in batch]
-            tasks.extend(batch_tasks)
+    @app_commands.command()
+    @commands.guild_only()
+    async def clear_data(self, interaction):
+        db = DB(db_creds)
+        await db.connect()
 
-        await asyncio.gather(*tasks)
+        button = ConfirmButton(author=interaction.user)
 
-        # Calculate timing statistics
-        total_time_str = f"{total_time:.2f} seconds"
-        msgs_per_sec = total_msgs / total_time
-        msgs_per_100k = msgs_per_sec * 100000
-        per_100k_str = f"{msgs_per_100k:.2f} seconds"
-
-        # Send completion embed
         embed = embed_template()
-        embed.title = "Harvest Complete"
-        embed.description = f"Successfully harvested all channels in {interaction.guild.name}"
-        embed.add_field(name="Total Harvested", value=f"`{total_msgs}`", inline=False)
-        embed.add_field(name="Total Time", value=f"`{total_time_str}`", inline=False)
-        embed.add_field(name="Time per 100,000 Messages", value=f"`{per_100k_str}`", inline=False)
-        await cmd_channel.send(embed=embed)
+        embed.title = "Clear Data"
+        embed.description = "Are you sure you want to clear all data for this server?"
+
+        await interaction.response.send_message(embed=embed, view=button)
+
+        await button.wait()
+
+        if button.value is True:
+            await db.remove_guild(interaction.guild.id)
+
+        else:
+            await interaction.response.send_message("Cancelled", ephemeral=True)
+
+        embed = embed_template()
+        embed.title = "Clear Data"
+        embed.description = "Successfully cleared all data"
+        await interaction.response.send_message("Cleared all data")
 
     @app_commands.command()
     @commands.guild_only()
