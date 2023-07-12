@@ -29,6 +29,10 @@ class Main(commands.Cog):
 
         cloud = await wordcloud(db, interation.guild.id, member.id)
 
+        if cloud is None:
+            embed = error_template("The specified user has not sent a single word in this server")
+            await interation.followup.send(embed=embed)
+
         embed = embed_template()
         embed.title = "Word Cloud"
         embed.description = f"Here is the wordcloud for {member.mention if member else 'this server'}"
