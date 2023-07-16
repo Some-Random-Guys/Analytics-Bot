@@ -7,7 +7,7 @@ from srg_analytics import DB
 from discord import app_commands, TextChannel, Member, User
 from backend import embed_template, error_template  # , remove_ignore_autocomplete
 import warnings
-import threading
+import multiprocessing
 
 warnings.filterwarnings('ignore', module=r"aiomysql")
 
@@ -63,14 +63,16 @@ class Admin(commands.GroupCog, name="admin"):
 
                 if len(messages) == 10000:
                     channel_msgs += len(messages)
-                    tasks.append(process_messages(messages))
+                    tasks.append(messages)
 
                     messages = []
 
             if messages:
                 channel_msgs += len(messages)
-                tasks.append(process_messages(messages))
-            await asyncio.gather(*tasks)
+                tasks.append(messages)
+
+            with multiprocessing.Pool() as pool:
+                pool.map(process_messages, tasks)
 
             del messages
 
