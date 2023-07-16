@@ -1,13 +1,13 @@
 import asyncio
 import time
-
 import discord
 from discord.ext import commands
-from backend import log, db_creds, is_admin
+from backend import log, db_creds, is_admin, ConfirmButton
 from srg_analytics import DB
 from discord import app_commands, TextChannel, Member, User
 from backend import embed_template, error_template  # , remove_ignore_autocomplete
 import warnings
+import threading
 
 warnings.filterwarnings('ignore', module=r"aiomysql")
 
@@ -34,7 +34,8 @@ class Admin(commands.GroupCog, name="admin"):
         aliases = tuple(set([alias for alias_list in aliased_users.values() for alias in alias_list]))
 
         total_msgs = 0
-        total_time = 0
+        harvest_start_time = time.time()
+        harvest_stats = [0.0]
 
         query = f"""
                 INSERT IGNORE INTO `{interaction.guild_id}` (message_id, channel_id, author_id, aliased_author_id, message_content, epoch, 
@@ -43,8 +44,10 @@ class Admin(commands.GroupCog, name="admin"):
             """
 
         async def process_channel(channel):
+            await asyncio.sleep(1)
+
             start = time.time()
-            nonlocal total_msgs, total_time
+            nonlocal total_msgs, harvest_start_time
             channel_msgs = 0
 
             messages = []
@@ -61,14 +64,15 @@ class Admin(commands.GroupCog, name="admin"):
                 if len(messages) == 10000:
                     channel_msgs += len(messages)
                     tasks.append(process_messages(messages))
-                    print("V")
 
                     messages = []
 
-            channel_msgs += len(messages)
-            total_msgs += channel_msgs
-            tasks.append(process_messages(messages))
+            if messages:
+                channel_msgs += len(messages)
+                tasks.append(process_messages(messages))
             await asyncio.gather(*tasks)
+
+            del messages
 
             embed = embed_template()
             embed.title = f"Harvested {channel.name} | {len(tasks)} tasks"
@@ -79,14 +83,26 @@ class Admin(commands.GroupCog, name="admin"):
 
             print(f"Took {time.time() - start} seconds to process {channel.name}")
 
-        async def get_reactions(reaction):
-            return [user.id async for user in reaction.users()]
+        async def get_reaction(message):
+
+            reactions = {}
+            if not message.reactions:
+                return None
+            for reaction in message.reactions:
+                key = reaction.emoji.id if reaction.is_custom_emoji() else reaction.emoji
+                reactions[key] = reaction.count
+
+            return reactions
 
         async def process_messages(messages):
+            nonlocal harvest_stats, total_msgs
+
             start = time.time()
             msg_data = []
 
+
             for message in messages:
+                total_msgs += 1
                 author = message.author.id
 
                 if author in aliases:
@@ -95,11 +111,7 @@ class Admin(commands.GroupCog, name="admin"):
                             author = alias
                             break
 
-                reactions = {}
-
-                for reaction in message.reactions:
-                    key = reaction.emoji.id if reaction.is_custom_emoji() else reaction.emoji
-                    reactions[key] = await get_reactions(reaction)
+                reactions = await get_reaction(message)
 
                 msg = (
                     int(message.id),
@@ -122,6 +134,12 @@ class Admin(commands.GroupCog, name="admin"):
 
                 msg_data.append(msg)
 
+                if total_msgs % 10000 == 0:
+                    harvest_stats.append(time.time() - harvest_start_time)
+                    print(harvest_stats)
+
+            del messages
+
             try:
                 async with db.con.acquire() as conn:
                     async with conn.cursor() as cur:
@@ -133,17 +151,48 @@ class Admin(commands.GroupCog, name="admin"):
             except Exception as e:
                 raise e
 
-            print(f"Took {time.time() - start} seconds to process {len(messages)} messages")
+            del msg_data
 
         if channel:
             await process_channel(channel)
-
         else:
             tasks = []
             for channel in interaction.guild.text_channels:
+                # check if the bot has permissions to read messages in the channel
+                if not channel.permissions_for(interaction.guild.me).read_messages:
+                    embed = error_template(f"Missing permissions to read messages in {channel.mention}")
+                    await cmd_channel.send(embed=embed)
+
+
                 tasks.append(process_channel(channel))
 
             await asyncio.gather(*tasks)
+
+        embed = embed_template()
+        embed.title = "Harvest Complete"
+        embed.description = f"Harvested {total_msgs} messages in {time.time() - harvest_start_time} seconds"
+        await cmd_channel.send(embed=embed)
+
+        import matplotlib.pyplot as plt
+        import mplcyberpunk
+
+        plt.style.use("cyberpunk")
+
+        # create a plot with harvest stats
+        # harvest_stats has y axis values
+        # x axis is the index of the value * 10000 in the list
+
+        plt.plot([i * 10000 for i in range(len(harvest_stats))], harvest_stats)
+
+        plt.xlabel("Messages")
+        plt.ylabel("Time (s)")
+
+        plt.savefig("harvest.png")
+
+        plt.close()
+
+        await cmd_channel.send(file=discord.File("harvest.png"))
+
 
     @app_commands.command()
     @commands.guild_only()
