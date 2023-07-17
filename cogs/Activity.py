@@ -1,10 +1,9 @@
 import datetime
-
 import discord
 from discord.ext import commands
 from backend import log, db_creds, embed_template, error_template
 from discord import app_commands
-from srg_analytics import activity_guild_visual, DB, activity_user_visual
+from srg_analytics import activity_guild_visual, DB, activity_user_visual, get_top_users_visual, get_top_users
 import os
 
 
@@ -31,43 +30,19 @@ class Activity(commands.GroupCog, name="activity"):
         app_commands.Choice(name="Past 3 Years", value="3y"),
         app_commands.Choice(name="All Time", value="all")
     ])
-    @app_commands.choices(timezone=[
-        app_commands.Choice(name="UTC-11", value="-11"),
-        app_commands.Choice(name="UTC-10", value="-10"),
-        app_commands.Choice(name="UTC-9", value="-9"),
-        app_commands.Choice(name="UTC-8", value="-8"),
-        app_commands.Choice(name="UTC-7", value="-7"),
-        app_commands.Choice(name="UTC-6", value="-6"),
-        app_commands.Choice(name="UTC-5", value="-5"),
-        app_commands.Choice(name="UTC-4", value="-4"),
-        app_commands.Choice(name="UTC-3", value="-3"),
-        app_commands.Choice(name="UTC-2", value="-2"),
-        app_commands.Choice(name="UTC-1", value="-1"),
-        app_commands.Choice(name="UTC", value="0"),
-        app_commands.Choice(name="UTC+1", value="1"),
-        app_commands.Choice(name="UTC+2", value="2"),
-        app_commands.Choice(name="UTC+3", value="3"),
-        app_commands.Choice(name="UTC+4", value="4"),
-        app_commands.Choice(name="UTC+5", value="5"),
-        app_commands.Choice(name="UTC+6", value="6"),
-        app_commands.Choice(name="UTC+7", value="7"),
-        app_commands.Choice(name="UTC+8", value="8"),
-        app_commands.Choice(name="UTC+9", value="9"),
-        app_commands.Choice(name="UTC+10", value="10"),
-        app_commands.Choice(name="UTC+11", value="11"),
-        app_commands.Choice(name="UTC+12", value="12"),
-        app_commands.Choice(name="UTC+13", value="13"),
-
-    ])
-    async def activity_server(self, interation, timeperiod: app_commands.Choice[str], timezone: app_commands.Choice[str] = None):
+    async def activity_server(self, interation, timeperiod: app_commands.Choice[str]):
         await interation.response.defer()
 
         db = DB(db_creds)
         await db.connect()
 
+        timezone = await db.get_timezone(guild_id=interation.guild.id)
+        if not timezone:
+            timezone = 3
+
         timezone = datetime.timezone(
             datetime.timedelta(
-                hours=int(timezone.value) if timezone else 3
+                hours=int(timezone) if timezone else 3
             )
         )
 
@@ -99,67 +74,48 @@ class Activity(commands.GroupCog, name="activity"):
         app_commands.Choice(name="Past 3 Years", value="3y"),
         app_commands.Choice(name="All Time", value="all")
     ])
-    @app_commands.choices(timezone=[
-        app_commands.Choice(name="UTC-11", value="-11"),
-        app_commands.Choice(name="UTC-10", value="-10"),
-        app_commands.Choice(name="UTC-9", value="-9"),
-        app_commands.Choice(name="UTC-8", value="-8"),
-        app_commands.Choice(name="UTC-7", value="-7"),
-        app_commands.Choice(name="UTC-6", value="-6"),
-        app_commands.Choice(name="UTC-5", value="-5"),
-        app_commands.Choice(name="UTC-4", value="-4"),
-        app_commands.Choice(name="UTC-3", value="-3"),
-        app_commands.Choice(name="UTC-2", value="-2"),
-        app_commands.Choice(name="UTC-1", value="-1"),
-        app_commands.Choice(name="UTC", value="0"),
-        app_commands.Choice(name="UTC+1", value="1"),
-        app_commands.Choice(name="UTC+2", value="2"),
-        app_commands.Choice(name="UTC+3", value="3"),
-        app_commands.Choice(name="UTC+4", value="4"),
-        app_commands.Choice(name="UTC+5", value="5"),
-        app_commands.Choice(name="UTC+6", value="6"),
-        app_commands.Choice(name="UTC+7", value="7"),
-        app_commands.Choice(name="UTC+8", value="8"),
-        app_commands.Choice(name="UTC+9", value="9"),
-        app_commands.Choice(name="UTC+10", value="10"),
-        app_commands.Choice(name="UTC+11", value="11"),
-        app_commands.Choice(name="UTC+12", value="12"),
-        app_commands.Choice(name="UTC+13", value="13"),
-
-    ])
     async def activity_user(
             self, interation, timeperiod: app_commands.Choice[str],
             user_1: discord.Member, user_2: discord.Member = None, user_3: discord.Member = None,
-            user_4: discord.Member = None, user_5: discord.Member = None, timezone: app_commands.Choice[str] = None
+            user_4: discord.Member = None, user_5: discord.Member = None
     ):
         await interation.response.defer()
 
         db = DB(db_creds)
         await db.connect()
 
+        timezone = await db.get_timezone(guild_id=interation.guild.id)
+        if not timezone:
+            timezone = 3
+
         timezone = datetime.timezone(
             datetime.timedelta(
-                hours=int(timezone.value) if timezone else 3
+                hours=int(timezone)
             )
         )
 
         # user_list format - [(name, id), (name, id), (name, id), (name, id), (name, id)]
         user_list = [
-            (user.nick or user.display_name, user.id) for user in
+            (user.nick or user.display_name or user.name, user.id) for user in
             [user_1, user_2, user_3, user_4, user_5] if user is not None
         ]
 
-        e = await activity_user_visual(db=db, guild_id=interation.guild.id, user_list=user_list,
+        res = await activity_user_visual(db=db, guild_id=interation.guild.id, user_list=user_list,
                                        time_period=timeperiod.value, timezone=timezone)
+
+        if res is None:
+            embed = error_template("There was an error generating the graph. Please try again later.")
+            await interation.followup.send(embed=embed)
+            return
 
         embed = embed_template()
         embed.title = f"Activity for {', '.join([user[0] for user in user_list])}"
         embed.description = f"Showing activity for the last {timeperiod.value}"
         embed.set_image(url="attachment://activity.png")
 
-        await interation.followup.send(embed=embed, file=discord.File(e, filename="activity.png"))
+        await interation.followup.send(embed=embed, file=discord.File(res, filename="activity.png"))
 
-        os.remove(e)
+        os.remove(res)
 
 
 
