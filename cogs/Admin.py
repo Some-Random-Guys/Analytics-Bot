@@ -275,6 +275,67 @@ class Admin(commands.GroupCog, name="admin"):
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
+    @app_commands.command()
+    async def set_timezone(self, interaction):
+        embed = embed_template()
+
+        db = DB(db_creds)
+        await db.connect()
+
+
+        timezones = ["UTC-11", "UTC-10", "UTC-09", "UTC-08", "UTC-07", "UTC-06", "UTC-05", "UTC-04", "UTC-03", "UTC-02", "UTC-01", "UTC±00", "UTC+01", "UTC+02",
+                        "UTC+03", "UTC+04", "UTC+05", "UTC+06", "UTC+07", "UTC+08", "UTC+09", "UTC+10", "UTC+11", "UTC+12", "UTC+13"]
+
+        values = ["-11", "-10", "-09", "-08", "-07", "-06", "-05", "-04", "-03", "-02", "-01", "00", "+01", "+02",
+                        "+03", "+04", "+05", "+06", "+07", "+08", "+09", "+10", "+11", "+12", "+13"]
+
+        options = []
+        for timezone in timezones:
+            options.append(discord.SelectOption(label=timezone, value=values[timezones.index(timezone)]))
+
+        # create a dropdown with the timezones
+        class MyView(discord.ui.View):
+            def __init__(self, db, interaction_):
+                super().__init__(timeout=60)
+                self.value = None
+                self.db = db
+                self.interaction_ = interaction_
+                print(self.interaction_)
+
+            @discord.ui.select(  # the decorator that lets you specify the properties of the select menu
+                placeholder="Choose a Timezone!",
+                min_values=1,
+                max_values=1,
+                options=options
+            )
+            async def select_callback(self, interaction, select):
+                print(select.values)
+                self.value = select.values[0]
+                print(self.value)
+
+                await self.db.set_timezone(guild_id=interaction.guild.id, timezone=int(self.value))
+
+                embed = embed_template()
+                embed.title = "Timezone Set!"
+                embed.description = f"Timezone set to {timezones[values.index(self.value)]}"
+
+
+                await self.interaction_.edit_original_response(embed=embed, view=None)
+
+
+            async def on_timeout(self):
+                # await interaction.response.send_message("Timed out...", ephemeral=True)
+                # grey out the options
+                self.children[0].disabled = True
+
+        # send a response, get the message object, edit it with the view
+        msg = await interaction.response.send_message("Choose a Timezone!", view=MyView(db, interaction))
+        print(msg)
+
+
+
+
+
     @commands.Cog.listener()
     async def check(self, ctx):
         return await is_admin(ctx)
