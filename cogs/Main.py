@@ -20,7 +20,7 @@ class Main(commands.Cog):
         # sync commands
         await self.client.tree.sync()
 
-    @app_commands.command()
+    @app_commands.command(name="wordcloud")
     async def wordcloud_(self, interation, member: discord.Member):
         await interation.response.defer()
 
@@ -32,6 +32,7 @@ class Main(commands.Cog):
         if cloud is None:
             embed = error_template("The specified user has not sent a single word in this server")
             await interation.followup.send(embed=embed)
+            return
 
         embed = embed_template()
         embed.title = "Word Cloud"
@@ -52,9 +53,15 @@ class Main(commands.Cog):
         app_commands.Choice(name="Words", value="words"),
         app_commands.Choice(name="Characters", value="characters"),
     ])
+    @app_commands.choices(timeperiod=[
+        app_commands.Choice(name="Today", value="day"),
+        app_commands.Choice(name="Past Week", value="week"),
+        app_commands.Choice(name="This Month", value="month"),
+        app_commands.Choice(name="This Year", value="year")
+    ])
     @app_commands.rename(type_='type')
     async def top(self, interaction, type_: app_commands.Choice[str], category: app_commands.Choice[str],
-                  amount: int = 10):
+                  timeperiod: app_commands.Choice[str] = None, amount: int = 10):
 
         await interaction.response.defer()
 
@@ -67,13 +74,14 @@ class Main(commands.Cog):
 
         embed = embed_template()
         embed.title = f"Top {amount} {type_.name}s"
+        timeperiod = timeperiod.value if timeperiod else None
 
         if type_.value == "channel":
-            res = await get_top_channels_visual(db, interaction.guild.id, self.client, category.value, amount)
+            res = await get_top_channels_visual(db, interaction.guild.id, self.client, category.value, amount)  # no timeperiod for channels
             embed.description = f"Top {amount} channels in this guild"
 
         elif type_.value == "user":
-            res = await get_top_users_visual(db, interaction.guild.id, self.client, category.value, amount)
+            res = await get_top_users_visual(db, interaction.guild.id, self.client, category.value, timeperiod, amount)
             embed.description = f"Top {amount} users in this guild"
 
         else:
@@ -147,6 +155,23 @@ class Main(commands.Cog):
         if member.bot:
             embed.add_field(name="Total Embeds", value=profile.total_embeds, inline=False)
         # embed.add_field(name="Top Emojis", value=str(profile.top_emojis), inline=False)
+
+        await interaction.followup.send(embed=embed)
+
+
+    @app_commands.command()
+    async def help(self, interaction):
+        await interaction.response.defer()
+
+        embed = embed_template()
+        embed.title = "Help"
+        embed.description = "Here are the commands for this bot"
+
+        embed.add_field(name="Activity", value="</activity:1116797580752474232> | Get user/server activity", inline=False)
+        embed.add_field(name="Profile", value="</profile:1116739144929001473> | Get a user's profile", inline=False)
+        embed.add_field(name="Top", value="</top:1109066788358082621> | Get the top users or channels", inline=False)
+        embed.add_field(name="Wordcloud", value="</wordcloud:1105886742650822680> | Get a wordcloud for a user or channel", inline=False)
+        embed.add_field(name="Export", value="</export:1116653401883815936> | Export a channel to HTML", inline=False)
 
         await interaction.followup.send(embed=embed)
 
