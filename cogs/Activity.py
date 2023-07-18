@@ -117,6 +117,52 @@ class Activity(commands.GroupCog, name="activity"):
 
         os.remove(res)
 
+    @app_commands.command(name="today")
+    @app_commands.choices(category=[
+        app_commands.Choice(name="Messages", value="messages"),
+        app_commands.Choice(name="Words", value="words"),
+        app_commands.Choice(name="Characters", value="characters"),
+    ])
+    async def today(self, interaction, category: app_commands.Choice[str], amount: int = 5):
+        await interaction.response.defer()
+
+        db = DB(db_creds)
+        await db.connect()
+
+        # get top users today
+        top = await get_top_users(db, interaction.guild.id, category.value, amount, "day", count_others=False)
+
+        if top is None:
+            embed = error_template("There was an error generating the graph. Please try again later.")
+            await interaction.followup.send(embed=embed)
+            return
+
+        top = [i[0] for i in top]
+
+        user_list = []
+
+        for user in top:
+            # get user object
+            user = await interaction.guild.fetch_member(user)
+
+            if user is None:
+                continue
+
+            nick = user.nick or user.display_name or user.name
+
+            user_list.append((nick, user.id))
+
+        file = await activity_user_visual(db=db, guild_id=interaction.guild.id, user_list=user_list, time_period="1d")
+
+        embed = embed_template()
+        embed.title = f"Today's top members for {category.value}"
+        embed.description = f"Showing activity for the last 1 day"
+        embed.set_image(url="attachment://activity.png")
+
+        await interaction.followup.send(embed=embed, file=discord.File(file, filename="activity.png"))
+
+        # remove file
+        os.remove(file)
 
 
 async def setup(client):
