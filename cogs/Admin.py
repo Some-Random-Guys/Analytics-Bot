@@ -267,7 +267,13 @@ class Admin(commands.GroupCog, name="admin"):
         db = DB(db_creds)
         await db.connect()
 
-        aliases = await db.get_user_aliases(guild_id=interaction.guild.id, user_id=user.id)
+        aliases = await db.get_user_aliases(guild_id=interaction.guild.id)
+
+        print(aliases)
+
+        # filter aliases to only those for the user
+        aliases = [alias for alias in aliases if alias.user_id == user.id]
+
 
         embed = embed_template()
         embed.title = f"Aliases for {user}"
