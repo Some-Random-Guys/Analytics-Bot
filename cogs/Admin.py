@@ -12,110 +12,51 @@ import multiprocessing
 warnings.filterwarnings('ignore', module=r"aiomysql")
 
 
-class Admin(commands.GroupCog, name="admin"):
-    def __init__(self, client):
-        self.client = client
-
-    @commands.Cog.listener()
-    async def on_ready(self):
-        log.info("Cog: Admin.py Loaded")
-
-
-    @app_commands.command()
-    @commands.guild_only()
-    async def harvest(self, interaction, channel: discord.TextChannel = None):
-        cmd_channel = interaction.channel
-        db = DB(db_creds)
-        await db.connect()
-
-        channel_ignores = tuple(await db.get_ignore_list("channel", interaction.guild.id))
-        user_ignores = tuple(await db.get_ignore_list("user", interaction.guild.id))
-        aliased_users = await db.get_user_aliases(guild_id=interaction.guild.id)
-        aliases = tuple(set([alias for alias_list in aliased_users.values() for alias in alias_list]))
-
-        total_msgs = 0
-        harvest_start_time = time.time()
-        harvest_stats = [0.0]
-
-        query = f"""
+query = f"""
                 INSERT IGNORE INTO `{interaction.guild_id}` (message_id, channel_id, author_id, aliased_author_id, message_content, epoch, 
                 edit_epoch, is_bot, has_embed, num_attachments, ctx_id, user_mentions, channel_mentions, role_mentions, reactions)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
             """
 
-        async def process_channel(channel):
-            await asyncio.sleep(1)
 
-            start = time.time()
-            nonlocal total_msgs, harvest_start_time
-            channel_msgs = 0
-
-            messages = []
-            tasks = []
-
-            async for message in channel.history(limit=None):
-                if message.author.id in user_ignores:
-                    continue
-                if message.channel.id in channel_ignores:
-                    continue
-
-                messages.append(message)
-
-                if len(messages) == 10000:
-                    channel_msgs += len(messages)
-                    tasks.append(messages)
-
-                    messages = []
-
-            if messages:
-                channel_msgs += len(messages)
-                tasks.append(messages)
-
-            with multiprocessing.Pool() as pool:
-                pool.map(process_messages, tasks)
-
-            del messages
-
-            embed = embed_template()
-            embed.title = f"Harvested {channel.name} | {len(tasks)} tasks"
-            embed.description = f"Harvested messages in {channel.name} in {time.time() - start} seconds"
-            embed.add_field(name="Total Messages", value=total_msgs)
-            embed.add_field(name="Channel Messages", value=channel_msgs)
-            await cmd_channel.send(embed=embed)
-
-            print(f"Took {time.time() - start} seconds to process {channel.name}")
-
-        async def get_reaction(message):
-
-            reactions = {}
-            if not message.reactions:
-                return None
-            for reaction in message.reactions:
-                key = reaction.emoji.id if reaction.is_custom_emoji() else reaction.emoji
-                reactions[key] = reaction.count
-
-            return reactions
-
-        async def process_messages(messages):
-            nonlocal harvest_stats, total_msgs
-
-            start = time.time()
-            msg_data = []
+class Admin(commands.GroupCog, name="admin"):
+    def __init__(self, client):
+        self.client = client
 
 
-            for message in messages:
-                total_msgs += 1
-                author = message.author.id
+    @commands.Cog.listener()
+    async def on_ready(self):
+        log.info("Cog: Admin.py Loaded")
 
+    async def process_messages(self, raw_messages, db):
+
+        cache = {123: None, }
+
+
+        msgs = []
+
+        msg_count = 0
+        for message in raw_messages:
+            msg_count += 1
+
+            author = message.author.id
+            
+            if author not in cache:
                 if author in aliases:
                     for alias, alias_list in aliased_users.items():
                         if author in alias_list:
+                            cache[alias] = author
+                                                        
                             author = alias
                             break
+                else:
+                    cache[author] = None
 
-                reactions = await get_reaction(message)
+            author = cache[author] or author
 
-                msg = (
+            reactions = "stuff"
+
+            msgs.append((
                     int(message.id),
                     int(message.channel.id),
                     int(message.author.id),
@@ -132,68 +73,67 @@ class Admin(commands.GroupCog, name="admin"):
                     None if message.raw_channel_mentions == [] else str(message.raw_channel_mentions),
                     None if message.raw_role_mentions == [] else str(message.raw_role_mentions),
                     None if str(reactions) == {} else str(reactions)
-                )
-
-                msg_data.append(msg)
-
-                if total_msgs % 10000 == 0:
-                    harvest_stats.append(time.time() - harvest_start_time)
-                    print(harvest_stats)
-
-            del messages
-
+                ))
+            
             try:
                 async with db.con.acquire() as conn:
                     async with conn.cursor() as cur:
                         # print(msg_data[-1])
-                        await cur.executemany(query, msg_data)
-
-                        # No need to commit since we are using autocommit
+                        await cur.executemany(query, msgs)
+        
 
             except Exception as e:
                 raise e
+            
 
-            del msg_data
+            
 
-        if channel:
-            await process_channel(channel)
-        else:
-            tasks = []
-            for channel in interaction.guild.text_channels:
-                # check if the bot has permissions to read messages in the channel
-                if not channel.permissions_for(interaction.guild.me).read_messages:
-                    embed = error_template(f"Missing permissions to read messages in {channel.mention}")
-                    await cmd_channel.send(embed=embed)
+        return msg_count
 
 
-                tasks.append(process_channel(channel))
+    async def process_channel(self, channel, db):
+        
+        messages, tasks = [], []
 
-            await asyncio.gather(*tasks)
+        count = 0
+        async for message in channel.history(limit=None):
+            # todo: add skip ignore
+            messages.append(message)
 
-        embed = embed_template()
-        embed.title = "Harvest Complete"
-        embed.description = f"Harvested {total_msgs} messages in {time.time() - harvest_start_time} seconds"
-        await cmd_channel.send(embed=embed)
+            count += 1
+            if count == 5000:
+                tasks.append(messages)
+                count = 0
+                messages.clear()
 
-        import matplotlib.pyplot as plt
-        import mplcyberpunk
+        with multiprocessing.Pool() as pool:
+            data = pool.map(self.process_messages, [(t, db) for t in tasks])w
 
-        plt.style.use("cyberpunk")
+        total_count = sum(data)
+            
+                
 
-        # create a plot with harvest stats
-        # harvest_stats has y axis values
-        # x axis is the index of the value * 10000 in the list
 
-        plt.plot([i * 10000 for i in range(len(harvest_stats))], harvest_stats)
 
-        plt.xlabel("Messages")
-        plt.ylabel("Time (s)")
+    @app_commands.command()
+    @commands.guild_only()
+    async def harvest(self, interaction, channel: discord.TextChannel = None):
+        cmd_channel = interaction.channel
 
-        plt.savefig("harvest.png")
+        db = DB(db_creds)
+        await db.connect()
 
-        plt.close()
+        channel_ignores = tuple(await db.get_ignore_list("channel", interaction.guild.id))
+        user_ignores = tuple(await db.get_ignore_list("user", interaction.guild.id))
+        aliased_users = await db.get_user_aliases(guild_id=interaction.guild.id)
+        aliases = tuple(set([alias for alias_list in aliased_users.values() for alias in alias_list]))
 
-        await cmd_channel.send(file=discord.File("harvest.png"))
+        async for channel in interaction.guild.text_channels:
+            if channel.id not in channel_ignores:
+                self.process_channel(channel, db)
+        
+                # `todo forum channel and text in voice channel
+            
 
 
     @app_commands.command()
