@@ -36,7 +36,8 @@ class Main(commands.Cog):
 
         embed = embed_template()
         embed.title = "Word Cloud"
-        embed.description = f"Here is the wordcloud for {member.mention if member else 'this server'}"
+        embed.description = f"Here is the wordcloud for {member.mention if member else 'this server'}\n" \
+                            f"Generated in {round(time.time() - start, 2)} seconds"
         embed.set_image(url="attachment://image.png")
 
         await interation.followup.send(embed=embed, file=discord.File(cloud, filename="image.png"))
@@ -167,10 +168,10 @@ class Main(commands.Cog):
         embed.title = "Help"
         embed.description = "Here are the commands for this bot"
 
-        embed.add_field(name="Activity", value="</activity:1116797580752474232> | Get user/server activity", inline=False)
+        embed.add_field(name="Activity", value="</activity:1116797580752474232> | Get server activity", inline=False)
         embed.add_field(name="Profile", value="</profile:1116739144929001473> | Get a user's profile", inline=False)
         embed.add_field(name="Top", value="</top:1109066788358082621> | Get the top users or channels", inline=False)
-        embed.add_field(name="Wordcloud", value="</wordcloud:1105886742650822680> | Get a wordcloud for a user or channel", inline=False)
+        embed.add_field(name="Wordcloud", value="</wordcloud:1130775934685945916> | Get a wordcloud for a user or channel", inline=False)
         embed.add_field(name="Export", value="</export:1116653401883815936> | Export a channel to HTML", inline=False)
 
         await interaction.followup.send(embed=embed)
