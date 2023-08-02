@@ -1,5 +1,5 @@
 import asyncio
-import time
+
 import discord
 from discord.ext import commands
 from backend import log, db_creds, is_admin, ConfirmButton
@@ -13,11 +13,79 @@ warnings.filterwarnings('ignore', module=r"aiomysql")
 
 
 query = f"""
-                INSERT IGNORE INTO `{interaction.guild_id}` (message_id, channel_id, author_id, aliased_author_id, message_content, epoch, 
+                INSERT IGNORE INTO `%s` (message_id, channel_id, author_id, aliased_author_id, message_content, epoch, 
                 edit_epoch, is_bot, has_embed, num_attachments, ctx_id, user_mentions, channel_mentions, role_mentions, reactions)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
             """
 
+
+async def process_messages(raw_messages, guild_id, aliases, aliased_users):
+    print("f")
+    cache = {}
+    msgs = []
+
+    msg_count = 0
+    for message in raw_messages:
+        msg_count += 1
+
+        author = message.author.id
+
+        if author not in cache:
+            if author in aliases:
+                for alias, alias_list in aliased_users.items():
+                    if author in alias_list:
+                        cache[alias] = author
+
+                        author = alias
+                        break
+            else:
+                cache[author] = None
+
+        author = cache[author] or author
+
+        # Get reactions and their counts
+        reactions = {}
+        if message.reactions:
+            for reaction in message.reactions:
+                key = reaction.emoji.id if reaction.is_custom_emoji() else reaction.emoji
+                reactions[key] = reaction.count
+
+        msgs.append((
+            int(message.id),
+            int(message.channel.id),
+            int(message.author.id),
+            int(author),
+            str(message.content),
+            int(message.created_at.timestamp()),
+            int(message.edited_at.timestamp()) if message.edited_at is not None else None,
+            int(message.author.bot),
+            bool(message.embeds != []),
+            len(message.attachments),
+            int(message.reference.message_id) if message.reference is not None and isinstance(
+                message.reference.message_id, int) else None,
+            None if message.raw_mentions == [] else str(message.raw_mentions),
+            None if message.raw_channel_mentions == [] else str(message.raw_channel_mentions),
+            None if message.raw_role_mentions == [] else str(message.raw_role_mentions),
+            None if str(reactions) == {} else str(reactions)
+        ))
+
+        db = DB(db_creds)
+
+        try:
+            async with db.con.acquire() as conn:
+                async with conn.cursor() as cur:
+                    # print(msg_data[-1])
+                    await cur.executemany(query % guild_id, msgs)
+
+
+        except Exception as e:
+            raise e
+
+    return msg_count
+
+
+def sync_process_messages(*args):
+    return asyncio.run(process_messages(*args))
 
 class Admin(commands.GroupCog, name="admin"):
     def __init__(self, client):
@@ -28,70 +96,11 @@ class Admin(commands.GroupCog, name="admin"):
     async def on_ready(self):
         log.info("Cog: Admin.py Loaded")
 
-    async def process_messages(self, raw_messages, db):
-
-        cache = {123: None, }
 
 
-        msgs = []
-
-        msg_count = 0
-        for message in raw_messages:
-            msg_count += 1
-
-            author = message.author.id
-            
-            if author not in cache:
-                if author in aliases:
-                    for alias, alias_list in aliased_users.items():
-                        if author in alias_list:
-                            cache[alias] = author
-                                                        
-                            author = alias
-                            break
-                else:
-                    cache[author] = None
-
-            author = cache[author] or author
-
-            reactions = "stuff"
-
-            msgs.append((
-                    int(message.id),
-                    int(message.channel.id),
-                    int(message.author.id),
-                    int(author),
-                    str(message.content),
-                    int(message.created_at.timestamp()),
-                    int(message.edited_at.timestamp()) if message.edited_at is not None else None,
-                    int(message.author.bot),
-                    bool(message.embeds != []),
-                    len(message.attachments),
-                    int(message.reference.message_id) if message.reference is not None and isinstance(
-                        message.reference.message_id, int) else None,
-                    None if message.raw_mentions == [] else str(message.raw_mentions),
-                    None if message.raw_channel_mentions == [] else str(message.raw_channel_mentions),
-                    None if message.raw_role_mentions == [] else str(message.raw_role_mentions),
-                    None if str(reactions) == {} else str(reactions)
-                ))
-            
-            try:
-                async with db.con.acquire() as conn:
-                    async with conn.cursor() as cur:
-                        # print(msg_data[-1])
-                        await cur.executemany(query, msgs)
-        
-
-            except Exception as e:
-                raise e
-            
-
-            
-
-        return msg_count
 
 
-    async def process_channel(self, channel, db):
+    async def process_channel(self, channel, db, guild_id, cmd_channel, user_ignores, aliased_users):
         
         messages, tasks = [], []
 
@@ -102,16 +111,25 @@ class Admin(commands.GroupCog, name="admin"):
 
             count += 1
             if count == 5000:
-                tasks.append(messages)
+                tasks.append(messages.copy())
                 count = 0
                 messages.clear()
 
+        if messages:
+            tasks.append(messages.copy())
+            messages.clear()
+
         with multiprocessing.Pool() as pool:
-            data = pool.map(self.process_messages, [(t, db) for t in tasks])w
+            data = pool.map(sync_process_messages, [(t, guild_id, user_ignores, aliased_users) for t in tasks])
 
         total_count = sum(data)
-            
-                
+        embed = embed_template()
+        embed.title = f"Harvested channel | {channel.name}"
+        embed.description = f"Processed {total_count} messages"
+        try:
+            await cmd_channel.send(embed=embed)
+        except Exception as e:
+            print(e)
 
 
 
@@ -126,13 +144,18 @@ class Admin(commands.GroupCog, name="admin"):
         channel_ignores = tuple(await db.get_ignore_list("channel", interaction.guild.id))
         user_ignores = tuple(await db.get_ignore_list("user", interaction.guild.id))
         aliased_users = await db.get_user_aliases(guild_id=interaction.guild.id)
-        aliases = tuple(set([alias for alias_list in aliased_users.values() for alias in alias_list]))
+        # aliases = tuple(set([alias for alias_list in aliased_users.values() for alias in alias_list]))
 
-        async for channel in interaction.guild.text_channels:
+        await interaction.response.send_message("Harvesting messages...")
+
+        for channel in interaction.guild.text_channels:
             if channel.id not in channel_ignores:
-                self.process_channel(channel, db)
+                print(channel.id)
+                await self.process_channel(channel, db, interaction.guild.id, cmd_channel, user_ignores, aliased_users)
         
                 # `todo forum channel and text in voice channel
+
+
             
 
 
