@@ -77,7 +77,8 @@ class Activity(commands.GroupCog, name="activity"):
     async def activity_user(
             self, interation, timeperiod: app_commands.Choice[str],
             user_1: discord.Member, user_2: discord.Member = None, user_3: discord.Member = None,
-            user_4: discord.Member = None, user_5: discord.Member = None
+            user_4: discord.Member = None, user_5: discord.Member = None,
+            include_server_activity: bool = False
     ):
         await interation.response.defer()
 
@@ -100,8 +101,12 @@ class Activity(commands.GroupCog, name="activity"):
             [user_1, user_2, user_3, user_4, user_5] if user is not None
         ]
 
+        if include_server_activity:
+            user_list.append(("Server", "Server"))
+
         res = await activity_user_visual(db=db, guild_id=interation.guild.id, user_list=user_list,
-                                       time_period=timeperiod.value, timezone=timezone)
+                                       time_period=timeperiod.value, include_server=include_server_activity,
+                                         timezone=timezone)
 
         if res is None:
             embed = error_template("There was an error generating the graph. Please try again later.")
@@ -152,7 +157,7 @@ class Activity(commands.GroupCog, name="activity"):
 
             user_list.append((nick, user.id))
 
-        file = await activity_user_visual(db=db, guild_id=interaction.guild.id, user_list=user_list, time_period="1d")
+        file = await activity_user_visual(db=db, guild_id=interaction.guild.id, user_list=user_list, include_server=False, time_period="1d")
 
         embed = embed_template()
         embed.title = f"Today's top members for {category.value}"
