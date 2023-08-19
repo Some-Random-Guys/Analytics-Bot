@@ -23,7 +23,7 @@ class Admin(commands.GroupCog, name="admin"):
 
     @app_commands.command()
     @commands.guild_only()
-    async def harvest(self, interaction, channel: discord.TextChannel = None):
+    async def harvest(self, interaction, channel: discord.TextChannel | discord.ForumChannel = None, amount: int = None):
         cmd_channel = interaction.channel
         db = DB(db_creds)
         await db.connect()
@@ -43,7 +43,7 @@ class Admin(commands.GroupCog, name="admin"):
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
             """
 
-        async def process_channel(channel):
+        async def process_channel(channel, amount: int = None):
             await asyncio.sleep(1)
 
             start = time.time()
@@ -53,7 +53,7 @@ class Admin(commands.GroupCog, name="admin"):
             messages = []
             tasks = []
 
-            async for message in channel.history(limit=None):
+            async for message in channel.history(limit=amount, oldest_first=False):
                 if message.author.id in user_ignores:
                     continue
                 if message.channel.id in channel_ignores:
@@ -83,23 +83,11 @@ class Admin(commands.GroupCog, name="admin"):
 
             print(f"Took {time.time() - start} seconds to process {channel.name}")
 
-        async def get_reaction(message):
-
-            reactions = {}
-            if not message.reactions:
-                return None
-            for reaction in message.reactions:
-                key = reaction.emoji.id if reaction.is_custom_emoji() else reaction.emoji
-                reactions[key] = reaction.count
-
-            return reactions
-
         async def process_messages(messages):
             nonlocal harvest_stats, total_msgs
 
             start = time.time()
             msg_data = []
-
 
             for message in messages:
                 total_msgs += 1
@@ -118,7 +106,6 @@ class Admin(commands.GroupCog, name="admin"):
                         key = reaction.emoji.id if reaction.is_custom_emoji() else reaction.emoji
                         reactions[key] = reaction.count
 
-
                 msg = (
                     int(message.id),
                     int(message.channel.id),
@@ -135,7 +122,7 @@ class Admin(commands.GroupCog, name="admin"):
                     None if message.raw_mentions == [] else str(message.raw_mentions),
                     None if message.raw_channel_mentions == [] else str(message.raw_channel_mentions),
                     None if message.raw_role_mentions == [] else str(message.raw_role_mentions),
-                    None if str(reactions) == {} else str(reactions)
+                    None if str(reactions) == '{}' else str(reactions)
                 )
 
                 msg_data.append(msg)
@@ -151,7 +138,6 @@ class Admin(commands.GroupCog, name="admin"):
                     async with conn.cursor() as cur:
                         # print(msg_data[-1])
                         await cur.executemany(query, msg_data)
-
                         # No need to commit since we are using autocommit
 
             except Exception as e:
@@ -160,17 +146,37 @@ class Admin(commands.GroupCog, name="admin"):
             del msg_data
 
         if channel:
-            await process_channel(channel)
+            if type(channel) == discord.TextChannel:
+                await process_channel(channel, amount)
+            elif type(channel) == discord.ForumChannel:
+                for thread in channel.threads:
+                    await process_channel(thread)
+
         else:
             tasks = []
+            # for each text channel
             for channel in interaction.guild.text_channels:
                 # check if the bot has permissions to read messages in the channel
                 if not channel.permissions_for(interaction.guild.me).read_messages:
                     embed = error_template(f"Missing permissions to read messages in {channel.mention}")
                     await cmd_channel.send(embed=embed)
 
+                for thread in channel.threads:
+                    if not thread.permissions_for(interaction.guild.me).read_messages:
+                        embed = error_template(f"Missing permissions to read messages in {thread.mention}")
+                        await cmd_channel.send(embed=embed)
+
+                    tasks.append(process_channel(thread))
 
                 tasks.append(process_channel(channel))
+
+            for channel in interaction.guild.forums:
+                for forum in channel.threads :
+                    if not forum.permissions_for(interaction.guild.me).read_messages:
+                        embed = error_template(f"Missing permissions to read messages in {forum.mention}")
+                        await cmd_channel.send(embed=embed)
+
+                    tasks.append(process_channel(forum))
 
             await asyncio.gather(*tasks)
 
