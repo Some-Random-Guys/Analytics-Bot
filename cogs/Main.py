@@ -4,7 +4,7 @@ from discord.ext import commands
 from discord import app_commands
 from backend import db_creds
 from srg_analytics import wordcloud, DB, get_top_users_visual, get_top_channels_visual, export_html, build_profile, \
-    Profile
+    Profile, get_user_top_date, get_server_top_date
 
 # Importing our custom variables/functions from backend.py
 from backend import log, embed_template, error_template
@@ -158,6 +158,27 @@ class Main(commands.Cog):
         # embed.add_field(name="Top Emojis", value=str(profile.top_emojis), inline=False)
 
         await interaction.followup.send(embed=embed)
+
+    @app_commands.command()
+    async def topdate(self, interaction, member: discord.Member = None):
+        await interaction.response.defer()
+        db = DB(db_creds)
+        await db.connect()
+        if member:
+            res = await get_user_top_date(db, interaction.guild.id, member.id)
+        else:
+            res = await get_server_top_date(db, interaction.guild.id)
+
+        embed = embed_template()
+        embed.title = "Top Messages in a Day"
+        embed.description = f"For {member.mention if member else 'this server'}"
+
+        for item in res:
+            embed.add_field(name=f"<t:{str(item[0])[:-7]}:D>", value=item[1], inline=False)
+
+        await interaction.followup.send(embed=embed)
+
+
 
 
     @app_commands.command()

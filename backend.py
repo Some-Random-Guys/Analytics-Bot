@@ -1,13 +1,11 @@
-import asyncio
 import configparser
+import os
 import sys
-import threading
-
 import discord
 import logging
 from discord.ext import commands
 from colorlog import ColoredFormatter
-from srg_analytics import DbCreds, DB
+from srg_analytics import DbCreds, DB, get_top_users_visual, get_top_channels_visual
 
 intents = discord.Intents()
 intents.message_content = True
