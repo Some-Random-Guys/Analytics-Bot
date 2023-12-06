@@ -1,5 +1,6 @@
 import os
 import discord
+import time
 from discord.ext import commands
 from discord import app_commands
 from backend import db_creds
@@ -26,6 +27,8 @@ class Main(commands.Cog):
 
         db: DB = DB(db_creds)
         await db.connect()
+
+        start = time.time()
 
         cloud = await wordcloud(db, interation.guild.id, member.id)
 
@@ -69,7 +72,7 @@ class Main(commands.Cog):
         db: DB = DB(db_creds)
         await db.connect()
 
-        # if amount isnt in the range 1-20, set it to 10
+        # if amount isn't in the range 1-20, set it to 10
         if not 1 < amount < 21:
             amount = 10
 
