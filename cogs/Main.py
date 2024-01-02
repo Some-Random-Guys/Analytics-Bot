@@ -73,7 +73,7 @@ class Main(commands.Cog):
         await db.connect()
 
         # if amount isn't in the range 1-20, set it to 10
-        if not 1 < amount < 21:
+        if not 1 <= amount < 21:
             amount = 10
 
         embed = embed_template()
