@@ -14,9 +14,9 @@ async def on_ready():
 
 
 async def load_cogs():
-    for file in os.listdir('./cogs'):
-        if file.endswith('.py'):
-            await client.load_extension(f'cogs.{file[:-3]}')
+    for file in os.listdir("./cogs"):
+        if file.endswith(".py"):
+            await client.load_extension(f"cogs.{file[:-3]}")
 
 
 asyncio.run(load_cogs())
