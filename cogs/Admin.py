@@ -171,7 +171,24 @@ class Admin(commands.GroupCog, name="admin"):
             elif type(channel) == discord.ForumChannel:
                 for thread in channel.threads:
                     await process_channel(thread)
+                tasks = []
+                async for thread in channel.archived_threads(private=False):
+                    if not thread.permissions_for(interaction.guild.me).read_messages:
+                        embed = error_template(
+                            f"Missing permissions to read messages in {thread.mention}"
+                        )
+                        await cmd_channel.send(embed=embed)
 
+                    tasks.append(process_channel(thread))
+                async for thread in channel.archived_threads(private=True):
+                    if not thread.permissions_for(interaction.guild.me).read_messages:
+                        embed = error_template(
+                            f"Missing permissions to read messages in {thread.mention}"
+                        )
+                        await cmd_channel.send(embed=embed)
+
+                    tasks.append(process_channel(thread))
+                await asyncio.gather(*tasks)
         else:
             tasks = []
             # for each text channel
@@ -184,6 +201,14 @@ class Admin(commands.GroupCog, name="admin"):
                     await cmd_channel.send(embed=embed)
 
                 for thread in channel.threads:
+                    if not thread.permissions_for(interaction.guild.me).read_messages:
+                        embed = error_template(
+                            f"Missing permissions to read messages in {thread.mention}"
+                        )
+                        await cmd_channel.send(embed=embed)
+
+                    tasks.append(process_channel(thread))
+                async for thread in channel.archived_threads(private=False):
                     if not thread.permissions_for(interaction.guild.me).read_messages:
                         embed = error_template(
                             f"Missing permissions to read messages in {thread.mention}"
@@ -210,6 +235,14 @@ class Admin(commands.GroupCog, name="admin"):
                         await cmd_channel.send(embed=embed)
 
                     tasks.append(process_channel(forum))
+                async for thread in channel.archived_threads(private=False):
+                    if not thread.permissions_for(interaction.guild.me).read_messages:
+                        embed = error_template(
+                            f"Missing permissions to read messages in {thread.mention}"
+                        )
+                        await cmd_channel.send(embed=embed)
+
+                    tasks.append(process_channel(thread))
                 async for thread in channel.archived_threads(private=True):
                     if not thread.permissions_for(interaction.guild.me).read_messages:
                         embed = error_template(
