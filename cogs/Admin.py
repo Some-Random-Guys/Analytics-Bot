@@ -100,11 +100,11 @@ class Admin(commands.GroupCog, name="admin"):
                             break
 
                 # Get reactions and their counts
-                reactions = {}
-                if message.reactions:
-                    for reaction in message.reactions:
-                        key = reaction.emoji.id if reaction.is_custom_emoji() else reaction.emoji
-                        reactions[key] = reaction.count
+                # reactions = {}
+                # if message.reactions:
+                #     for reaction in message.reactions:
+                #         key = reaction.emoji.id if reaction.is_custom_emoji() else reaction.emoji
+                #         reactions[key] = reaction.count
 
                 msg = (
                     int(message.id),
@@ -122,7 +122,7 @@ class Admin(commands.GroupCog, name="admin"):
                     None if message.raw_mentions == [] else str(message.raw_mentions),
                     None if message.raw_channel_mentions == [] else str(message.raw_channel_mentions),
                     None if message.raw_role_mentions == [] else str(message.raw_role_mentions),
-                    None if str(reactions) == '{}' else str(reactions)
+                    None # if str(reactions) == '{}' else str(reactions)
                 )
 
                 msg_data.append(msg)
