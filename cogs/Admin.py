@@ -9,7 +9,7 @@ from backend import embed_template, error_template  # , remove_ignore_autocomple
 import warnings
 import threading
 
-warnings.filterwarnings('ignore', module=r"aiomysql")
+warnings.filterwarnings("ignore", module=r"aiomysql")
 
 
 class Admin(commands.GroupCog, name="admin"):
@@ -20,18 +20,28 @@ class Admin(commands.GroupCog, name="admin"):
     async def on_ready(self):
         log.info("Cog: Admin.py Loaded")
 
-
     @app_commands.command()
     @commands.guild_only()
-    async def harvest(self, interaction, channel: discord.TextChannel | discord.ForumChannel = None, amount: int = None):
+    async def harvest(
+        self,
+        interaction,
+        channel: discord.TextChannel | discord.ForumChannel = None,
+        amount: int = None,
+    ):
         cmd_channel = interaction.channel
         db = DB(db_creds)
         await db.connect()
 
-        channel_ignores = tuple(await db.get_ignore_list("channel", interaction.guild.id))
+        channel_ignores = tuple(
+            await db.get_ignore_list("channel", interaction.guild.id)
+        )
         user_ignores = tuple(await db.get_ignore_list("user", interaction.guild.id))
         aliased_users = await db.get_user_aliases(guild_id=interaction.guild.id)
-        aliases = tuple(set([alias for alias_list in aliased_users.values() for alias in alias_list]))
+        aliases = tuple(
+            set(
+                [alias for alias_list in aliased_users.values() for alias in alias_list]
+            )
+        )
 
         total_msgs = 0
         harvest_start_time = time.time()
@@ -76,7 +86,9 @@ class Admin(commands.GroupCog, name="admin"):
 
             embed = embed_template()
             embed.title = f"Harvested {channel.name} | {len(tasks)} tasks"
-            embed.description = f"Harvested messages in {channel.name} in {time.time() - start} seconds"
+            embed.description = (
+                f"Harvested messages in {channel.name} in {time.time() - start} seconds"
+            )
             embed.add_field(name="Total Messages", value=total_msgs)
             embed.add_field(name="Channel Messages", value=channel_msgs)
             await cmd_channel.send(embed=embed)
@@ -113,16 +125,24 @@ class Admin(commands.GroupCog, name="admin"):
                     int(author),
                     str(message.content) if message.content != "" else None,
                     int(message.created_at.timestamp()),
-                    int(message.edited_at.timestamp()) if message.edited_at is not None else None,
+                    int(message.edited_at.timestamp())
+                    if message.edited_at is not None
+                    else None,
                     int(message.author.bot),
                     bool(message.embeds != []),
                     len(message.attachments),
-                    int(message.reference.message_id) if message.reference is not None and isinstance(
-                        message.reference.message_id, int) else None,
+                    int(message.reference.message_id)
+                    if message.reference is not None
+                    and isinstance(message.reference.message_id, int)
+                    else None,
                     None if message.raw_mentions == [] else str(message.raw_mentions),
-                    None if message.raw_channel_mentions == [] else str(message.raw_channel_mentions),
-                    None if message.raw_role_mentions == [] else str(message.raw_role_mentions),
-                    None # if str(reactions) == '{}' else str(reactions)
+                    None
+                    if message.raw_channel_mentions == []
+                    else str(message.raw_channel_mentions),
+                    None
+                    if message.raw_role_mentions == []
+                    else str(message.raw_role_mentions),
+                    None,  # if str(reactions) == '{}' else str(reactions)
                 )
 
                 msg_data.append(msg)
@@ -158,26 +178,46 @@ class Admin(commands.GroupCog, name="admin"):
             for channel in interaction.guild.text_channels:
                 # check if the bot has permissions to read messages in the channel
                 if not channel.permissions_for(interaction.guild.me).read_messages:
-                    embed = error_template(f"Missing permissions to read messages in {channel.mention}")
+                    embed = error_template(
+                        f"Missing permissions to read messages in {channel.mention}"
+                    )
                     await cmd_channel.send(embed=embed)
 
                 for thread in channel.threads:
                     if not thread.permissions_for(interaction.guild.me).read_messages:
-                        embed = error_template(f"Missing permissions to read messages in {thread.mention}")
+                        embed = error_template(
+                            f"Missing permissions to read messages in {thread.mention}"
+                        )
                         await cmd_channel.send(embed=embed)
 
                     tasks.append(process_channel(thread))
+                async for thread in channel.archived_threads(private=True):
+                    if not thread.permissions_for(interaction.guild.me).read_messages:
+                        embed = error_template(
+                            f"Missing permissions to read messages in {thread.mention}"
+                        )
+                        await cmd_channel.send(embed=embed)
 
+                    tasks.append(process_channel(thread))
                 tasks.append(process_channel(channel))
 
             for channel in interaction.guild.forums:
-                for forum in channel.threads :
+                for forum in channel.threads:
                     if not forum.permissions_for(interaction.guild.me).read_messages:
-                        embed = error_template(f"Missing permissions to read messages in {forum.mention}")
+                        embed = error_template(
+                            f"Missing permissions to read messages in {forum.mention}"
+                        )
                         await cmd_channel.send(embed=embed)
 
                     tasks.append(process_channel(forum))
+                async for thread in channel.archived_threads(private=True):
+                    if not thread.permissions_for(interaction.guild.me).read_messages:
+                        embed = error_template(
+                            f"Missing permissions to read messages in {thread.mention}"
+                        )
+                        await cmd_channel.send(embed=embed)
 
+                    tasks.append(process_channel(thread))
             await asyncio.gather(*tasks)
 
         embed = embed_template()
@@ -234,8 +274,13 @@ class Admin(commands.GroupCog, name="admin"):
 
     @app_commands.command()
     @commands.guild_only()
-    async def add_ignore(self, interaction, channel: TextChannel = None, user: Member = None, update_existing: bool = False):
-
+    async def add_ignore(
+        self,
+        interaction,
+        channel: TextChannel = None,
+        user: Member = None,
+        update_existing: bool = False,
+    ):
         db = DB(db_creds)
         await db.connect()
 
@@ -244,11 +289,23 @@ class Admin(commands.GroupCog, name="admin"):
                 channel = interaction.channel
 
         if user is not None:
-            await db.add_ignore(guild_id=interaction.guild.id, user_id=user.id, update_existing=update_existing)
-            await interaction.response.send_message(f"Ignoring {user.mention}", ephemeral=True)
+            await db.add_ignore(
+                guild_id=interaction.guild.id,
+                user_id=user.id,
+                update_existing=update_existing,
+            )
+            await interaction.response.send_message(
+                f"Ignoring {user.mention}", ephemeral=True
+            )
         elif channel is not None:
-            await db.add_ignore(guild_id=interaction.guild.id, channel_id=channel.id, update_existing=update_existing)
-            await interaction.response.send_message(f"Ignoring {channel.mention}", ephemeral=True)
+            await db.add_ignore(
+                guild_id=interaction.guild.id,
+                channel_id=channel.id,
+                update_existing=update_existing,
+            )
+            await interaction.response.send_message(
+                f"Ignoring {channel.mention}", ephemeral=True
+            )
 
     # @app_commands.command()
     # @app_commands.choices(type_=[
@@ -261,12 +318,21 @@ class Admin(commands.GroupCog, name="admin"):
 
     @app_commands.command()
     @commands.guild_only()
-    async def add_user_alias(self, interaction, user: Member, alias: User, update_existing: bool = True):
+    async def add_user_alias(
+        self, interaction, user: Member, alias: User, update_existing: bool = True
+    ):
         db = DB(db_creds)
         await db.connect()
 
-        await db.add_user_alias(guild_id=interaction.guild.id, user_id=user.id, alias_id=alias.id, update_existing=update_existing)
-        await interaction.response.send_message(f"Added alias {alias} for {user.mention}", ephemeral=update_existing)
+        await db.add_user_alias(
+            guild_id=interaction.guild.id,
+            user_id=user.id,
+            alias_id=alias.id,
+            update_existing=update_existing,
+        )
+        await interaction.response.send_message(
+            f"Added alias {alias} for {user.mention}", ephemeral=update_existing
+        )
 
     @app_commands.command()
     async def show_aliases(self, interaction, user: Member = None):
@@ -283,10 +349,11 @@ class Admin(commands.GroupCog, name="admin"):
         # filter aliases to only those for the user
         aliases = [alias for alias in aliases if alias.user_id == user.id]
 
-
         embed = embed_template()
         embed.title = f"Aliases for {user}"
-        embed.description = f"Aliases: {', '.join([f'{alias.mention}' for alias in aliases])}"
+        embed.description = (
+            f"Aliases: {', '.join([f'{alias.mention}' for alias in aliases])}"
+        )
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -297,16 +364,69 @@ class Admin(commands.GroupCog, name="admin"):
         db = DB(db_creds)
         await db.connect()
 
+        timezones = [
+            "UTC-11",
+            "UTC-10",
+            "UTC-09",
+            "UTC-08",
+            "UTC-07",
+            "UTC-06",
+            "UTC-05",
+            "UTC-04",
+            "UTC-03",
+            "UTC-02",
+            "UTC-01",
+            "UTC±00",
+            "UTC+01",
+            "UTC+02",
+            "UTC+03",
+            "UTC+04",
+            "UTC+05",
+            "UTC+06",
+            "UTC+07",
+            "UTC+08",
+            "UTC+09",
+            "UTC+10",
+            "UTC+11",
+            "UTC+12",
+            "UTC+13",
+        ]
 
-        timezones = ["UTC-11", "UTC-10", "UTC-09", "UTC-08", "UTC-07", "UTC-06", "UTC-05", "UTC-04", "UTC-03", "UTC-02", "UTC-01", "UTC±00", "UTC+01", "UTC+02",
-                        "UTC+03", "UTC+04", "UTC+05", "UTC+06", "UTC+07", "UTC+08", "UTC+09", "UTC+10", "UTC+11", "UTC+12", "UTC+13"]
-
-        values = ["-11", "-10", "-09", "-08", "-07", "-06", "-05", "-04", "-03", "-02", "-01", "00", "+01", "+02",
-                        "+03", "+04", "+05", "+06", "+07", "+08", "+09", "+10", "+11", "+12", "+13"]
+        values = [
+            "-11",
+            "-10",
+            "-09",
+            "-08",
+            "-07",
+            "-06",
+            "-05",
+            "-04",
+            "-03",
+            "-02",
+            "-01",
+            "00",
+            "+01",
+            "+02",
+            "+03",
+            "+04",
+            "+05",
+            "+06",
+            "+07",
+            "+08",
+            "+09",
+            "+10",
+            "+11",
+            "+12",
+            "+13",
+        ]
 
         options = []
         for timezone in timezones:
-            options.append(discord.SelectOption(label=timezone, value=values[timezones.index(timezone)]))
+            options.append(
+                discord.SelectOption(
+                    label=timezone, value=values[timezones.index(timezone)]
+                )
+            )
 
         # create a dropdown with the timezones
         class MyView(discord.ui.View):
@@ -321,22 +441,24 @@ class Admin(commands.GroupCog, name="admin"):
                 placeholder="Choose a Timezone!",
                 min_values=1,
                 max_values=1,
-                options=options
+                options=options,
             )
             async def select_callback(self, interaction, select):
                 print(select.values)
                 self.value = select.values[0]
                 print(self.value)
 
-                await self.db.set_timezone(guild_id=interaction.guild.id, timezone=int(self.value))
+                await self.db.set_timezone(
+                    guild_id=interaction.guild.id, timezone=int(self.value)
+                )
 
                 embed = embed_template()
                 embed.title = "Timezone Set!"
-                embed.description = f"Timezone set to {timezones[values.index(self.value)]}"
-
+                embed.description = (
+                    f"Timezone set to {timezones[values.index(self.value)]}"
+                )
 
                 await self.interaction_.edit_original_response(embed=embed, view=None)
-
 
             async def on_timeout(self):
                 # await interaction.response.send_message("Timed out...", ephemeral=True)
@@ -344,12 +466,10 @@ class Admin(commands.GroupCog, name="admin"):
                 self.children[0].disabled = True
 
         # send a response, get the message object, edit it with the view
-        msg = await interaction.response.send_message("Choose a Timezone!", view=MyView(db, interaction))
+        msg = await interaction.response.send_message(
+            "Choose a Timezone!", view=MyView(db, interaction)
+        )
         print(msg)
-
-
-
-
 
     @commands.Cog.listener()
     async def check(self, ctx):

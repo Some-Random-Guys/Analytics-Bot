@@ -1,10 +1,19 @@
 from discord.ext import commands
 from discord import app_commands
 from srg_analytics import DB
-from backend import log, embed_template, error_template, db_creds, owner_ids, owner_guilds
+from backend import (
+    log,
+    embed_template,
+    error_template,
+    db_creds,
+    owner_ids,
+    owner_guilds,
+)
 
 
-class Owners(commands.GroupCog, group_name="owners"): # TODO use owner_guilds to restrict commands to owner guilds
+class Owners(
+    commands.GroupCog, group_name="owners"
+):  # TODO use owner_guilds to restrict commands to owner guilds
     def __init__(self, client):
         self.client = client
 
@@ -28,7 +37,9 @@ class Owners(commands.GroupCog, group_name="owners"): # TODO use owner_guilds to
         try:
             self.client.reload_extension(f"cogs.{cog}")
         except Exception as e:
-            await interation.response.send_message(f"Failed to reload {cog}", ephemeral=True)
+            await interation.response.send_message(
+                f"Failed to reload {cog}", ephemeral=True
+            )
             return
 
         await interation.response.send_message(f"Reloaded {cog}", ephemeral=True)
@@ -41,7 +52,9 @@ class Owners(commands.GroupCog, group_name="owners"): # TODO use owner_guilds to
         try:
             self.client.load_extension(f"cogs.{cog}")
         except Exception as e:
-            await interation.response.send_message(f"Failed to load {cog}", ephemeral=True)
+            await interation.response.send_message(
+                f"Failed to load {cog}", ephemeral=True
+            )
             return
 
         await interation.response.send_message(f"Loaded {cog}", ephemeral=True)
@@ -54,7 +67,9 @@ class Owners(commands.GroupCog, group_name="owners"): # TODO use owner_guilds to
         try:
             self.client.unload_extension(f"cogs.{cog}")
         except Exception as e:
-            await interation.response.send_message(f"Failed to unload {cog}", ephemeral=True)
+            await interation.response.send_message(
+                f"Failed to unload {cog}", ephemeral=True
+            )
             return
 
         await interation.response.send_message(f"Unloaded {cog}", ephemeral=True)
@@ -69,7 +84,9 @@ class Owners(commands.GroupCog, group_name="owners"): # TODO use owner_guilds to
 
         await db.add_guild(guild_id)
 
-        await interation.response.send_message(f"Added guild {guild_id}", ephemeral=True)
+        await interation.response.send_message(
+            f"Added guild {guild_id}", ephemeral=True
+        )
 
     @app_commands.command()
     async def remove_guild(self, interation, guild_id: str):
@@ -81,7 +98,9 @@ class Owners(commands.GroupCog, group_name="owners"): # TODO use owner_guilds to
 
         await db.remove_guild(guild_id)
 
-        await interation.response.send_message(f"Removed guild {guild_id}", ephemeral=True)
+        await interation.response.send_message(
+            f"Removed guild {guild_id}", ephemeral=True
+        )
 
 
 async def setup(client):
