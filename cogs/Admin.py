@@ -42,6 +42,7 @@ class Admin(commands.GroupCog, name="admin"):
                 [alias for alias_list in aliased_users.values() for alias in alias_list]
             )
         )
+        harvested_message_ids = {i[0] for i in await db.get(interaction.guild.id, selected=['message_id'])}
 
         total_msgs = 0
         harvest_start_time = time.time()
@@ -53,6 +54,11 @@ class Admin(commands.GroupCog, name="admin"):
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
             """
 
+        def message_exists(message_id):
+            old_length = len(harvested_message_ids)
+            harvested_message_ids.add(message_id)
+            return old_length == len(harvested_message_ids)
+            
         async def process_channel(channel, amount: int = None):
             await asyncio.sleep(1)
 
@@ -67,6 +73,8 @@ class Admin(commands.GroupCog, name="admin"):
                 if message.author.id in user_ignores:
                     continue
                 if message.channel.id in channel_ignores:
+                    continue
+                if message_exists(message.id):
                     continue
 
                 messages.append(message)
@@ -98,7 +106,6 @@ class Admin(commands.GroupCog, name="admin"):
         async def process_messages(messages):
             nonlocal harvest_stats, total_msgs
 
-            start = time.time()
             msg_data = []
 
             for message in messages:
