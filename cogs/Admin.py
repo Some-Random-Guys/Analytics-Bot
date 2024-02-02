@@ -59,7 +59,7 @@ class Admin(commands.GroupCog, name="admin"):
             harvested_message_ids.add(message_id)
             return old_length == len(harvested_message_ids)
             
-        async def process_channel(channel, amount: int = 9999999):
+        async def process_channel(channel, amount: int = None):
             await asyncio.sleep(1)
 
             start = time.time()
