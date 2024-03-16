@@ -12,6 +12,19 @@ from srg_analytics import (
 )
 import os
 
+timeperiod_choices = [
+            app_commands.Choice(name="Today", value="1d"),
+            app_commands.Choice(name="Past 5 days", value="5d"),
+            app_commands.Choice(name="Past 1 Week", value="1w"),
+            app_commands.Choice(name="Past 2 Weeks", value="2w"),
+            app_commands.Choice(name="Past 1 Month", value="1m"),
+            app_commands.Choice(name="Past 6 Months", value="6m"),
+            app_commands.Choice(name="Past 1 Year", value="1y"),
+            app_commands.Choice(name="Past 2 Years", value="2y"),
+            app_commands.Choice(name="Past 5 Years", value="5y"),
+            app_commands.Choice(name="All Time", value="all"),
+        ]
+
 
 class Activity(commands.GroupCog, name="activity"):
     def __init__(self, client):
@@ -22,22 +35,7 @@ class Activity(commands.GroupCog, name="activity"):
         log.info("Cog: Activity.py Loaded")
 
     @app_commands.command(name="server")
-    @app_commands.choices(
-        timeperiod=[
-            app_commands.Choice(name="Today", value="1d"),
-            app_commands.Choice(name="Past 5 days", value="5d"),
-            app_commands.Choice(name="Past week", value="1w"),
-            app_commands.Choice(name="Past 2 weeks", value="2w"),
-            app_commands.Choice(name="Past month", value="1m"),
-            app_commands.Choice(name="Past 3 Months", value="3m"),
-            app_commands.Choice(name="Past 6 Months", value="6m"),
-            app_commands.Choice(name="Past 9 Months", value="9m"),
-            app_commands.Choice(name="Past 1 Year", value="1y"),
-            app_commands.Choice(name="Past 2 Years", value="2y"),
-            app_commands.Choice(name="Past 3 Years", value="3y"),
-            app_commands.Choice(name="All Time", value="all"),
-        ]
-    )
+    @app_commands.choices(timeperiod=timeperiod_choices)
     async def activity_server(self, interation, timeperiod: app_commands.Choice[str]):
         await interation.response.defer()
 
@@ -60,8 +58,10 @@ class Activity(commands.GroupCog, name="activity"):
         )
 
         embed = embed_template()
-        embed.title = f"Activity for {interation.guild.name}"
-        embed.description = f"Showing activity for the last {timeperiod.value}"
+        embed.title = "Server Activity"
+        embed.description = \
+        f"For the guild `{interaction.guild.name}`\n" \
+        f"Showing activity for the {timeperiod.name}"
         embed.set_image(url="attachment://activity.png")
 
         await interation.followup.send(
@@ -71,22 +71,7 @@ class Activity(commands.GroupCog, name="activity"):
         os.remove(e)
 
     @app_commands.command(name="user")
-    @app_commands.choices(
-        timeperiod=[
-            app_commands.Choice(name="Today", value="1d"),
-            app_commands.Choice(name="Past 5 days", value="5d"),
-            app_commands.Choice(name="Past week", value="1w"),
-            app_commands.Choice(name="Past 2 weeks", value="2w"),
-            app_commands.Choice(name="Past month", value="1m"),
-            app_commands.Choice(name="Past 3 Months", value="3m"),
-            app_commands.Choice(name="Past 6 Months", value="6m"),
-            app_commands.Choice(name="Past 9 Months", value="9m"),
-            app_commands.Choice(name="Past 1 Year", value="1y"),
-            app_commands.Choice(name="Past 2 Years", value="2y"),
-            app_commands.Choice(name="Past 3 Years", value="3y"),
-            app_commands.Choice(name="All Time", value="all"),
-        ]
-    )
+    @app_commands.choices(timeperiod=timeperiod_choices)
     async def activity_user(
         self,
         interation,
@@ -136,8 +121,10 @@ class Activity(commands.GroupCog, name="activity"):
             return
 
         embed = embed_template()
-        embed.title = f"Activity for {', '.join([user[0] for user in user_list])}"
-        embed.description = f"Showing activity for the last {timeperiod.value}"
+        embed.title = f"User Activity"
+        embed.description = \
+        f"For users {' '.join([user.mention for user in [user_1, user_2, user_3, user_4, user_5] if user is not None])}\n" \
+        f"Showing activity for the {timeperiod.name}"
         embed.set_image(url="attachment://activity.png")
 
         await interation.followup.send(
@@ -169,7 +156,7 @@ class Activity(commands.GroupCog, name="activity"):
 
         if top is None:
             embed = error_template(
-                "There was an error generating the graph. Please try again later."
+                "There was an error generating the graph due to inadequate data. Please try again later."
             )
             await interaction.followup.send(embed=embed)
             return
@@ -198,8 +185,8 @@ class Activity(commands.GroupCog, name="activity"):
         )
 
         embed = embed_template()
-        embed.title = f"Today's top members for {category.value}"
-        embed.description = f"Showing activity for the last 1 day"
+        embed.title = f"Today's Activity"
+        embed.description = f"Showing top users by {category.value}"
         embed.set_image(url="attachment://activity.png")
 
         await interaction.followup.send(
