@@ -36,13 +36,13 @@ class Activity(commands.GroupCog, name="activity"):
 
     @app_commands.command(name="server")
     @app_commands.choices(timeperiod=timeperiod_choices)
-    async def activity_server(self, interation, timeperiod: app_commands.Choice[str]):
-        await interation.response.defer()
+    async def activity_server(self, interaction, timeperiod: app_commands.Choice[str]):
+        await interaction.response.defer()
 
         db = DB(db_creds)
-        await db.connect()
+        await db.connect() 
 
-        timezone = await db.get_timezone(guild_id=interation.guild.id)
+        timezone = await db.get_timezone(guild_id=interaction.guild.id)
         if not timezone:
             timezone = 3
 
@@ -52,8 +52,8 @@ class Activity(commands.GroupCog, name="activity"):
 
         e = await activity_guild_visual(
             db=db,
-            guild_id=interation.guild.id,
-            time_period=timeperiod.value,
+            guild_id=interaction.guild.id,
+            timeperiod_or_daterange=timeperiod.value,
             timezone=timezone,
         )
 
@@ -64,7 +64,7 @@ class Activity(commands.GroupCog, name="activity"):
         f"Showing activity for the {timeperiod.name}"
         embed.set_image(url="attachment://activity.png")
 
-        await interation.followup.send(
+        await interaction.followup.send(
             embed=embed, file=discord.File(e, filename="activity.png")
         )
 
@@ -74,7 +74,7 @@ class Activity(commands.GroupCog, name="activity"):
     @app_commands.choices(timeperiod=timeperiod_choices)
     async def activity_user(
         self,
-        interation,
+        interaction,
         timeperiod: app_commands.Choice[str],
         user_1: discord.Member,
         user_2: discord.Member = None,
@@ -83,12 +83,12 @@ class Activity(commands.GroupCog, name="activity"):
         user_5: discord.Member = None,
         include_server_activity: bool = False,
     ):
-        await interation.response.defer()
+        await interaction.response.defer()
 
         db = DB(db_creds)
         await db.connect()
 
-        timezone = await db.get_timezone(guild_id=interation.guild.id)
+        timezone = await db.get_timezone(guild_id=interaction.guild.id)
         if not timezone:
             timezone = 3
 
@@ -106,7 +106,7 @@ class Activity(commands.GroupCog, name="activity"):
 
         res = await activity_user_visual(
             db=db,
-            guild_id=interation.guild.id,
+            guild_id=interaction.guild.id,
             user_list=user_list,
             time_period=timeperiod.value,
             include_server=include_server_activity,
@@ -117,7 +117,7 @@ class Activity(commands.GroupCog, name="activity"):
             embed = error_template(
                 "There was an error generating the graph. Please try again later."
             )
-            await interation.followup.send(embed=embed)
+            await interaction.followup.send(embed=embed)
             return
 
         embed = embed_template()
@@ -127,7 +127,7 @@ class Activity(commands.GroupCog, name="activity"):
         f"Showing activity for the {timeperiod.name}"
         embed.set_image(url="attachment://activity.png")
 
-        await interation.followup.send(
+        await interaction.followup.send(
             embed=embed, file=discord.File(res, filename="activity.png")
         )
 
@@ -196,6 +196,90 @@ class Activity(commands.GroupCog, name="activity"):
         # remove file
         os.remove(file)
 
+
+
+    @app_commands.command(name="serverpast")
+    async def activity_serverpast(self, interaction, start_date: str, end_date: str):
+        await interaction.response.defer()
+
+        db = DB(db_creds)
+        await db.connect()
+
+        # Timezone logic
+        timezone = await db.get_timezone(guild_id=interaction.guild.id)
+        if not timezone:
+            timezone = 3
+
+        timezone = datetime.timezone(
+            datetime.timedelta(hours=int(timezone) if timezone else 3)
+        )
+
+        # parameter validation
+        dates = [start_date, end_date]
+        
+        for i in range(len(dates)):
+            dates[i] = dates[i].strip()
+            dates[i] = dates[i].replace("/", "-")
+            dates[i] = dates[i].replace(".", "-")
+            dates[i] = dates[i].replace(" ", "-")
+
+        #if datetime.datetime.strptime(dates[1], date_format).timestamp() - datetime.datetime.strptime(dates[0], date_format).timestamp() < 60*60*24:
+        #    print("TODO thing too small")
+        #    return
+
+        try:
+            # 10-11-22 -> 10-11-2022
+            for i in range(len(dates)):
+                parts = dates[i].split("-")
+                if not len(parts[-1]) == 4:
+                    dates[i] = f"{dates[i][0:-3]}-20{dates[i][-2:]}"
+        except:
+            print("TODO ANOTHER ERROR MESSAGE")
+            return
+
+        print((dates[0].split("-")))
+
+        if len(dates[0].split("-")) == 2:
+            # Months 
+            date_format = '%m-%Y'
+            for i in range(len(dates)):
+                try:
+                    datetime.datetime.strptime(dates[i], date_format)
+                except:
+                    print("TODO add error msg")
+                    print("e")
+                    return
+            
+
+        elif len(dates[0].split("-")) == 3:
+            # Days
+            date_format = '%d-%m-%Y'
+            for i in range(len(dates)):
+                try:
+                    datetime.datetime.strptime(dates[i], date_format)
+                except:
+                    print("TODO add error msg")
+                    return
+
+        e = await activity_guild_visual(
+            db=db,
+            guild_id=interaction.guild.id,
+            timeperiod_or_daterange=dates,
+            timezone=timezone,
+        )
+
+        embed = embed_template()
+        embed.title = "Server Activity"
+        embed.description = \
+        f"For the guild `{interaction.guild.name}`\n" \
+        f"Showing activity from {start_date} to {end_date}"
+        embed.set_image(url="attachment://activity.png")
+
+        await interaction.followup.send(
+            embed=embed, file=discord.File(e, filename="activity.png")
+        )
+
+        os.remove(e)
 
 async def setup(client):
     await client.add_cog(Activity(client))
