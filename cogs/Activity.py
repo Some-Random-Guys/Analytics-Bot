@@ -13,17 +13,61 @@ from srg_analytics import (
 import os
 
 timeperiod_choices = [
-            app_commands.Choice(name="Today", value="1d"),
-            app_commands.Choice(name="Past 5 days", value="5d"),
-            app_commands.Choice(name="Past 1 Week", value="1w"),
-            app_commands.Choice(name="Past 2 Weeks", value="2w"),
-            app_commands.Choice(name="Past 1 Month", value="1m"),
-            app_commands.Choice(name="Past 6 Months", value="6m"),
-            app_commands.Choice(name="Past 1 Year", value="1y"),
-            app_commands.Choice(name="Past 2 Years", value="2y"),
-            app_commands.Choice(name="Past 5 Years", value="5y"),
-            app_commands.Choice(name="All Time", value="all"),
-        ]
+    app_commands.Choice(name="Today", value="1d"),
+    app_commands.Choice(name="Past 5 days", value="5d"),
+    app_commands.Choice(name="Past 1 Week", value="1w"),
+    app_commands.Choice(name="Past 2 Weeks", value="2w"),
+    app_commands.Choice(name="Past 1 Month", value="1m"),
+    app_commands.Choice(name="Past 6 Months", value="6m"),
+    app_commands.Choice(name="Past 1 Year", value="1y"),
+    app_commands.Choice(name="Past 2 Years", value="2y"),
+    app_commands.Choice(name="Past 5 Years", value="5y"),
+    app_commands.Choice(name="All Time", value="all"),
+]
+
+
+async def format_datarange(start_date: str, end_date: str):
+    # parameter validation
+    dates: list[str] = [start_date, end_date]
+
+    for i in range(len(dates)):
+        dates[i] = dates[i].strip()
+        dates[i] = dates[i].replace("/", "-")
+        dates[i] = dates[i].replace("\\", "-")
+        dates[i] = dates[i].replace(".", "-")
+        dates[i] = dates[i].replace(" ", "-")
+
+    # if datetime.datetime.strptime(dates[1], date_format).timestamp() - datetime.datetime.strptime(dates[0], date_format).timestamp() < 60*60*24:
+    #    print("TODO thing too small")
+    #    return
+
+    # Check if both the dates are in the same format
+    if len(dates[0].split("-")) != len(dates[1].split("0")):
+        raise ValueError
+
+    # 10-11-22 -> 10-11-2022
+    for i in range(len(dates)):
+        parts = dates[i].split("-")
+
+        # If the year is `yy` instead of `yyyy`, convert to `20yy`
+        if not len(parts[-1]) == 4:
+            dates[i] = f"{dates[i][0:-3]}-20{dates[i][-2:]}"
+
+    # if the date is in the format mm/yyyy
+    if len(dates[0].split("-")) == 2:
+        date_format = '%m-%Y'
+
+        for i in range(len(dates)):
+            datetime.datetime.strptime(dates[i], date_format)
+
+    # if the date is in the format dd/mm/yyyy
+    elif len(dates[0].split("-")) == 3:
+        date_format = '%d-%m-%Y'
+
+        for i in range(len(dates)):
+            datetime.datetime.strptime(dates[i], date_format)
+
+    return dates
 
 
 class Activity(commands.GroupCog, name="activity"):
@@ -40,7 +84,7 @@ class Activity(commands.GroupCog, name="activity"):
         await interaction.response.defer()
 
         db = DB(db_creds)
-        await db.connect() 
+        await db.connect()
 
         timezone = await db.get_timezone(guild_id=interaction.guild.id)
         if not timezone:
@@ -60,8 +104,8 @@ class Activity(commands.GroupCog, name="activity"):
         embed = embed_template()
         embed.title = "Server Activity"
         embed.description = \
-        f"For the guild `{interaction.guild.name}`\n" \
-        f"Showing activity for the {timeperiod.name}"
+            f"For the guild `{interaction.guild.name}`\n" \
+            f"Showing activity for the {timeperiod.name}"
         embed.set_image(url="attachment://activity.png")
 
         await interaction.followup.send(
@@ -73,15 +117,13 @@ class Activity(commands.GroupCog, name="activity"):
     @app_commands.command(name="user")
     @app_commands.choices(timeperiod=timeperiod_choices)
     async def activity_user(
-        self,
-        interaction,
-        timeperiod: app_commands.Choice[str],
-        user_1: discord.Member,
-        user_2: discord.Member = None,
-        user_3: discord.Member = None,
-        user_4: discord.Member = None,
-        user_5: discord.Member = None,
-        include_server_activity: bool = False,
+            self, interaction,
+            timeperiod: app_commands.Choice[str],
+            user_1: discord.Member,
+            user_2: discord.Member = None,
+            user_3: discord.Member = None,
+            user_4: discord.Member = None,
+            user_5: discord.Member = None,
     ):
         await interaction.response.defer()
 
@@ -101,15 +143,11 @@ class Activity(commands.GroupCog, name="activity"):
             if user is not None
         ]
 
-        if include_server_activity:
-            user_list.append(("Server", "Server"))
-
         res = await activity_user_visual(
             db=db,
             guild_id=interaction.guild.id,
             user_list=user_list,
-            time_period=timeperiod.value,
-            include_server=include_server_activity,
+            timeperiod_or_daterange=timeperiod.value,
             timezone=timezone,
         )
 
@@ -123,8 +161,8 @@ class Activity(commands.GroupCog, name="activity"):
         embed = embed_template()
         embed.title = f"User Activity"
         embed.description = \
-        f"For users {' '.join([user.mention for user in [user_1, user_2, user_3, user_4, user_5] if user is not None])}\n" \
-        f"Showing activity for the {timeperiod.name}"
+            f"For users {' '.join([user.mention for user in [user_1, user_2, user_3, user_4, user_5] if user is not None])}\n" \
+            f"Showing activity for the {timeperiod.name}"
         embed.set_image(url="attachment://activity.png")
 
         await interaction.followup.send(
@@ -142,7 +180,7 @@ class Activity(commands.GroupCog, name="activity"):
         ]
     )
     async def today(
-        self, interaction, category: app_commands.Choice[str], amount: int = 5
+            self, interaction, category: app_commands.Choice[str], amount: int = 5
     ):
         await interaction.response.defer()
 
@@ -180,7 +218,6 @@ class Activity(commands.GroupCog, name="activity"):
             db=db,
             guild_id=interaction.guild.id,
             user_list=user_list,
-            include_server=False,
             time_period="1d",
         )
 
@@ -195,8 +232,6 @@ class Activity(commands.GroupCog, name="activity"):
 
         # remove file
         os.remove(file)
-
-
 
     @app_commands.command(name="serverpast")
     async def activity_serverpast(self, interaction, start_date: str, end_date: str):
@@ -214,52 +249,14 @@ class Activity(commands.GroupCog, name="activity"):
             datetime.timedelta(hours=int(timezone) if timezone else 3)
         )
 
-        # parameter validation
-        dates = [start_date, end_date]
-        
-        for i in range(len(dates)):
-            dates[i] = dates[i].strip()
-            dates[i] = dates[i].replace("/", "-")
-            dates[i] = dates[i].replace(".", "-")
-            dates[i] = dates[i].replace(" ", "-")
-
-        #if datetime.datetime.strptime(dates[1], date_format).timestamp() - datetime.datetime.strptime(dates[0], date_format).timestamp() < 60*60*24:
-        #    print("TODO thing too small")
-        #    return
-
         try:
-            # 10-11-22 -> 10-11-2022
-            for i in range(len(dates)):
-                parts = dates[i].split("-")
-                if not len(parts[-1]) == 4:
-                    dates[i] = f"{dates[i][0:-3]}-20{dates[i][-2:]}"
-        except:
-            print("TODO ANOTHER ERROR MESSAGE")
+            dates = await format_datarange(start_date, end_date)
+        except ValueError("Invalid date format"):
+            await interaction.followup.send("Invalid date format")
             return
-
-        print((dates[0].split("-")))
-
-        if len(dates[0].split("-")) == 2:
-            # Months 
-            date_format = '%m-%Y'
-            for i in range(len(dates)):
-                try:
-                    datetime.datetime.strptime(dates[i], date_format)
-                except:
-                    print("TODO add error msg")
-                    print("e")
-                    return
-            
-
-        elif len(dates[0].split("-")) == 3:
-            # Days
-            date_format = '%d-%m-%Y'
-            for i in range(len(dates)):
-                try:
-                    datetime.datetime.strptime(dates[i], date_format)
-                except:
-                    print("TODO add error msg")
-                    return
+        except ValueError("Invalid date"):
+            await interaction.followup.send("Invalid date")
+            return
 
         e = await activity_guild_visual(
             db=db,
@@ -271,8 +268,8 @@ class Activity(commands.GroupCog, name="activity"):
         embed = embed_template()
         embed.title = "Server Activity"
         embed.description = \
-        f"For the guild `{interaction.guild.name}`\n" \
-        f"Showing activity from {start_date} to {end_date}"
+            f"For the guild `{interaction.guild.name}`\n" \
+            f"Showing activity from {start_date} to {end_date}"
         embed.set_image(url="attachment://activity.png")
 
         await interaction.followup.send(
@@ -280,6 +277,72 @@ class Activity(commands.GroupCog, name="activity"):
         )
 
         os.remove(e)
+
+    @app_commands.command(name="userpast")
+    async def activity_userpast(
+            self, interaction: discord.Interaction, start_date: str, end_date: str,
+            user_1: discord.Member,
+            user_2: discord.Member = None,
+            user_3: discord.Member = None,
+            user_4: discord.Member = None,
+            user_5: discord.Member = None,
+    ):
+        await interaction.response.defer()
+
+        db = DB(db_creds)
+        await db.connect()
+
+        timezone = await db.get_timezone(guild_id=interaction.guild.id)
+        if not timezone:
+            timezone = 3
+
+        timezone = datetime.timezone(datetime.timedelta(hours=int(timezone)))
+
+        # user_list format - [(name, id), (name, id), (name, id), (name, id), (name, id)]
+        user_list = [
+            (user.nick or user.display_name or user.name, user.id)
+            for user in [user_1, user_2, user_3, user_4, user_5]
+            if user is not None
+        ]
+
+        try:
+            dates = await format_datarange(start_date, end_date)
+            assert dates is not None
+        except ValueError:
+            await interaction.followup.send("Invalid date or date format")
+            return
+        except AssertionError:
+            await interaction.followup.send("Unknown error") #TODO
+            return
+
+        res = await activity_user_visual(
+            db=db,
+            guild_id=interaction.guild.id,
+            user_list=user_list,
+            timeperiod_or_daterange=dates,
+            timezone=timezone,
+        )
+
+        if res is None:
+            embed = error_template(
+                "There was an error generating the graph. Please try again later."
+            )
+            await interaction.followup.send(embed=embed)
+            return
+
+        embed = embed_template()
+        embed.title = f"User Activity"
+        embed.description = \
+            f"For users {' '.join([user.mention for user in [user_1, user_2, user_3, user_4, user_5] if user is not None])}\n" \
+            f"Showing activity from {start_date} to {end_date}"
+        embed.set_image(url="attachment://activity.png")
+
+        await interaction.followup.send(
+            embed=embed, file=discord.File(res, filename="activity.png")
+        )
+
+        os.remove(res)
+
 
 async def setup(client):
     await client.add_cog(Activity(client))
