@@ -14,7 +14,6 @@ import os
 
 timeperiod_choices = [
     app_commands.Choice(name="Today", value="1d"),
-    app_commands.Choice(name="Past 5 days", value="5d"),
     app_commands.Choice(name="Past 1 Week", value="1w"),
     app_commands.Choice(name="Past 2 Weeks", value="2w"),
     app_commands.Choice(name="Past 1 Month", value="1m"),
@@ -42,7 +41,7 @@ async def format_datarange(start_date: str, end_date: str):
     #    return
 
     # Check if both the dates are in the same format
-    if len(dates[0].split("-")) != len(dates[1].split("0")):
+    if len(dates[0].split("-")) != len(dates[1].split("-")):
         raise ValueError
 
     # 10-11-22 -> 10-11-2022
@@ -119,11 +118,11 @@ class Activity(commands.GroupCog, name="activity"):
     async def activity_user(
             self, interaction,
             timeperiod: app_commands.Choice[str],
-            user_1: discord.Member,
-            user_2: discord.Member = None,
-            user_3: discord.Member = None,
-            user_4: discord.Member = None,
-            user_5: discord.Member = None,
+            user_1: discord.User,
+            user_2: discord.User = None,
+            user_3: discord.User = None,
+            user_4: discord.User = None,
+            user_5: discord.User = None,
     ):
         await interaction.response.defer()
 
@@ -138,7 +137,7 @@ class Activity(commands.GroupCog, name="activity"):
 
         # user_list format - [(name, id), (name, id), (name, id), (name, id), (name, id)]
         user_list = [
-            (user.nick or user.display_name or user.name, user.id)
+            (user.nick if hasattr(user, 'nick') else user.display_name or user.name, user.id)
             for user in [user_1, user_2, user_3, user_4, user_5]
             if user is not None
         ]
@@ -210,7 +209,7 @@ class Activity(commands.GroupCog, name="activity"):
             if user is None:
                 continue
 
-            nick = user.nick or user.display_name or user.name
+            nick = user.nick if hasattr(user, 'nick') else user.display_name or user.name
 
             user_list.append((nick, user.id))
 
@@ -251,11 +250,12 @@ class Activity(commands.GroupCog, name="activity"):
 
         try:
             dates = await format_datarange(start_date, end_date)
-        except ValueError("Invalid date format"):
-            await interaction.followup.send("Invalid date format")
+            assert dates is not None
+        except ValueError:
+            await interaction.followup.send("Invalid date or date format")
             return
-        except ValueError("Invalid date"):
-            await interaction.followup.send("Invalid date")
+        except AssertionError:
+            await interaction.followup.send("Unknown error")  # TODO
             return
 
         e = await activity_guild_visual(
@@ -281,11 +281,11 @@ class Activity(commands.GroupCog, name="activity"):
     @app_commands.command(name="userpast")
     async def activity_userpast(
             self, interaction: discord.Interaction, start_date: str, end_date: str,
-            user_1: discord.Member,
-            user_2: discord.Member = None,
-            user_3: discord.Member = None,
-            user_4: discord.Member = None,
-            user_5: discord.Member = None,
+            user_1: discord.User,
+            user_2: discord.User = None,
+            user_3: discord.User = None,
+            user_4: discord.User = None,
+            user_5: discord.User = None,
     ):
         await interaction.response.defer()
 
@@ -300,7 +300,7 @@ class Activity(commands.GroupCog, name="activity"):
 
         # user_list format - [(name, id), (name, id), (name, id), (name, id), (name, id)]
         user_list = [
-            (user.nick or user.display_name or user.name, user.id)
+            (user.nick if hasattr(user, 'nick') else user.display_name or user.name, user.id)
             for user in [user_1, user_2, user_3, user_4, user_5]
             if user is not None
         ]

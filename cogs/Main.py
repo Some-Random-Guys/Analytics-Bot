@@ -232,10 +232,16 @@ class Main(commands.Cog):
         embed.title = "Top Messages in a Day"
         embed.description = f"For {member.mention if member else 'this server'}"
 
-        for item in res:
-            embed.add_field(
-                name=f"<t:{str(item[0])[:-7]}:D>", value=item[1], inline=False
-            )
+        if member:
+            for item in res:
+                embed.add_field(
+                    name=f"<t:{str(item[0])[:-7]}:D>", value=f"{item[1]} ({round((item[1] / item[2]) * 100)}% of that day)", inline=False
+                )
+        else:
+            for item in res:
+                embed.add_field(
+                    name=f"<t:{str(item[0])[:-7]}:D>", value=item[1], inline=False
+                )
 
         await interaction.followup.send(embed=embed)
 
