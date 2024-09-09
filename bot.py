@@ -17,6 +17,8 @@ async def load_cogs(mode):
     if mode != "listener":
         for file in os.listdir("./cogs"):
             if file.endswith(".py"):
+                if file[:-3] == "Listeners":
+                    continue
                 await client.load_extension(f"cogs.{file[:-3]}")
     else:
         await client.load_extension(f"cogs.Listeners")
