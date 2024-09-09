@@ -7,10 +7,10 @@ import aiomysql
 class DB:
     """Class for interaction with the database."""
 
-    def __init__(self, db_creds, is_pool: bool = False):
+    def __init__(self, db_creds, maxsize: int = 10):
         self.con = None
         self.db_creds = db_creds
-        self.is_pool = is_pool
+        self.maxsize = maxsize
 
         asyncio.create_task(self.connect())  # this doesn't work
 
@@ -18,10 +18,7 @@ class DB:
         if self.con is not None:
             return
 
-        if self.is_pool:
-            self.con = await aiomysql.create_pool(**self.db_creds, autocommit=True)
-        else:
-            self.con = await aiomysql.connect(**self.db_creds, autocommit=True)
+        self.con = await aiomysql.create_pool(**self.db_creds, autocommit=True, maxsize=self.maxsize)
 
         await self._create_data_tables()
 
@@ -120,9 +117,7 @@ class DB:
     async def add_message(self, guild_id: int, data: dict):
         """Adds a message to the database."""
         async with self.con.acquire() as conn:
-
             async with conn.cursor() as cur:
-
                 await cur.execute(
                     f"""
                         INSERT IGNORE INTO `{guild_id}` (message_id, channel_id, author_id, aliased_author_id, message_length, epoch, 
@@ -142,7 +137,8 @@ class DB:
 
                 )
 
-    async def add_messages_bulk(self, guild_id, message_ids, channel_ids, author_ids, aliased_author_ids, message_lengths, epoches, has_embeds, num_attachments):
+    async def add_messages_bulk(self, guild_id, message_ids, channel_ids, author_ids, aliased_author_ids,
+                                message_lengths, epoches, has_embeds, num_attachments):
         async with self.con.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.executemany(
@@ -271,10 +267,30 @@ class DB:
 
     # analysis functions
     async def get_message_count(self, guild_id: int, channel_id: int = None, user_id: int = None):
-        if not guild_id:
-            raise ValueError("guild_id cannot be None")
 
         query = f"SELECT COUNT(*) FROM `{guild_id}`"
+        conditions = []
+        params = []
+
+        if channel_id is not None:
+            conditions.append("channel_id = %s")
+            params.append(channel_id)
+
+        if user_id is not None:
+            conditions.append("author_id = %s")
+            params.append(user_id)
+
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+
+        async with self.con.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute(query, tuple(params))
+                return (await cur.fetchone())[0]
+
+    async def get_character_count(self, guild_id: int, channel_id: int = None, user_id: int = None):
+
+        query = f"SELECT sum(message_length) FROM `{guild_id}`"
         conditions = []
         params = []
 

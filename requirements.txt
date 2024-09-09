@@ -2,3 +2,4 @@ colorlog==6.8.2
 discord.py==2.4.0
 aiomysql==0.2.0
 mplcyberpunk==0.7.1
+pandas==2.2.2

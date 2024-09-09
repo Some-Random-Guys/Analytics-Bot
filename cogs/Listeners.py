@@ -5,7 +5,7 @@ from srg_analytics import DB
 
 class Listeners(commands.Cog):
     def __init__(self, client):
-        self.db = DB(db_creds=get_db_creds('onsite'), is_pool=True)  # TODO change to offsite
+        self.db = DB(db_creds=get_db_creds('onsite'))  # TODO change to offsite
         self.client = client
 
         self.channel_ignores = {}
