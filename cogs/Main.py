@@ -3,13 +3,11 @@ import discord
 import time
 from discord.ext import commands
 from discord import app_commands
-from backend import db_creds
+from backend import get_db_creds
 from srg_analytics import (
-    wordcloud,
     DB,
     get_top_users_visual,
     get_top_channels_visual,
-    export_html,
     build_profile,
     Profile,
     get_user_top_date,
@@ -28,39 +26,7 @@ class Main(commands.Cog):
     async def on_ready(self):
         log.info("Cog: Main.py Loaded")
         # sync commands
-        await self.client.tree.sync()
-
-    @app_commands.command(name="wordcloud")
-    async def wordcloud_(self, interation, member: discord.Member):
-        await interation.response.defer()
-
-        db: DB = DB(db_creds)
-        await db.connect()
-
-        start = time.time()
-
-        cloud = await wordcloud(db, interation.guild.id, member.id)
-
-        if cloud is None:
-            embed = error_template(
-                "The specified user has not sent a single word in this server"
-            )
-            await interation.followup.send(embed=embed)
-            return
-
-        embed = embed_template()
-        embed.title = "Word Cloud"
-        embed.description = (
-            f"Here is the wordcloud for {member.mention if member else 'this server'}\n"
-            f"Generated in {round(time.time() - start, 2)} seconds"
-        )
-        embed.set_image(url="attachment://image.png")
-
-        await interation.followup.send(
-            embed=embed, file=discord.File(cloud, filename="image.png")
-        )
-
-        os.remove(cloud)
+        # await self.client.tree.sync()
 
     @app_commands.command(name="top")
     @app_commands.choices(
@@ -95,7 +61,7 @@ class Main(commands.Cog):
     ):
         await interaction.response.defer()
 
-        db: DB = DB(db_creds)
+        db = DB(db_creds=get_db_creds('onsite'))
         await db.connect()
 
         # if amount isn't in the range 1-20, set it to 10
@@ -135,54 +101,11 @@ class Main(commands.Cog):
 
         os.remove(res)
 
-
-    @app_commands.command()
-    @app_commands.choices(
-        export_format=[
-            app_commands.Choice(name="HTML", value="html"),
-            # app_commands.Choice(name="JSON", value="json"),
-        ]
-    )
-    async def export(
-        self,
-        interation,
-        channel: discord.TextChannel,
-        export_format: app_commands.Choice[str],
-        message_limit: int = None,
-    ):
-        # Return if the user is not an admin
-        if not interation.user.guild_permissions.administrator:
-            await interation.response.send_message(
-                embed=error_template("You must be an admin to use this command"),
-                ephemeral=True,
-            )
-            return
-
-        await interation.response.defer()
-
-        # HTML Export
-        if export_format.value == "html":
-            # Get the file from package
-            file = await export_html(
-                client=self.client, channel=channel, limit=message_limit
-            )
-
-            # Create embed
-            embed = embed_template()
-            embed.title = "Exported HTML"
-            embed.description = f"Here is the exported HTML file for {channel.mention}"
-            embed.set_image(url=f"attachment://export.html")
-
-            # Send the embed and file
-            await interation.followup.send(
-                embed=embed, file=discord.File(file, filename=f"{channel.id}.html")
-            )
-
     @app_commands.command()
     async def profile(self, interaction, member: discord.Member = None):
         await interaction.response.defer()
 
-        db = DB(db_creds)
+        db = DB(db_creds=get_db_creds('onsite'))
         await db.connect()
 
         if not member:
@@ -221,8 +144,10 @@ class Main(commands.Cog):
     @app_commands.command()
     async def topdate(self, interaction, member: discord.Member = None):
         await interaction.response.defer()
-        db = DB(db_creds)
+
+        db = DB(db_creds=get_db_creds('onsite'))
         await db.connect()
+
         if member:
             res = await get_user_top_date(db, interaction.guild.id, member.id)
         else:
@@ -266,16 +191,6 @@ class Main(commands.Cog):
         embed.add_field(
             name="Top",
             value="</top:1109066788358082621> | Get the top users or channels",
-            inline=False,
-        )
-        embed.add_field(
-            name="Wordcloud",
-            value="</wordcloud:1130775934685945916> | Get a wordcloud for a user or channel",
-            inline=False,
-        )
-        embed.add_field(
-            name="Export",
-            value="</export:1116653401883815936> | Export a channel to HTML",
             inline=False,
         )
 

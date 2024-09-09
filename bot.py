@@ -1,7 +1,7 @@
 import asyncio
 import os
 import sys
-from backend import client, discord_token, log, presence
+from backend import client, discord_token, log, presence, mode
 import discord.utils
 
 
@@ -13,13 +13,16 @@ async def on_ready():
     await client.change_presence(activity=discord.Game(name=presence))
 
 
-async def load_cogs():
-    for file in os.listdir("./cogs"):
-        if file.endswith(".py"):
-            await client.load_extension(f"cogs.{file[:-3]}")
+async def load_cogs(mode):
+    if mode != "listener":
+        for file in os.listdir("./cogs"):
+            if file.endswith(".py"):
+                await client.load_extension(f"cogs.{file[:-3]}")
+    else:
+        await client.load_extension(f"cogs.Listeners")
 
 
-asyncio.run(load_cogs())
+asyncio.run(load_cogs(mode))
 
 
 # Run the actual bot

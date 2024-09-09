@@ -5,10 +5,10 @@ from backend import (
     log,
     embed_template,
     error_template,
-    db_creds,
     owner_ids,
-    owner_guilds,
+    owner_guilds, get_db_creds,
 )
+
 
 
 class Owners(
@@ -79,7 +79,7 @@ class Owners(
         if interation.user.id not in owner_ids:
             return
 
-        db = DB(db_creds)
+        db = DB(db_creds=get_db_creds('onsite'))
         await db.connect()
 
         await db.add_guild(guild_id)
@@ -93,7 +93,7 @@ class Owners(
         if interation.user.id not in owner_ids:
             return
 
-        db = DB(db_creds)
+        db = DB(db_creds=get_db_creds('onsite'))
         await db.connect()
 
         await db.remove_guild(guild_id)

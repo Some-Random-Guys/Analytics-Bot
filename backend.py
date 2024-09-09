@@ -1,14 +1,18 @@
 import configparser
-import os
 import sys
+
+import aiomysql
 import discord
 import logging
+
 from discord.ext import commands
 from colorlog import ColoredFormatter
-from srg_analytics import DbCreds, DB, get_top_users_visual, get_top_channels_visual
 
 intents = discord.Intents()
+
 intents.message_content = True
+intents.messages = True
+intents .guild_messages = True
 intents.guilds = True
 intents.members = True
 
@@ -41,6 +45,7 @@ except Exception as e:
 # Getting variables from config.ini
 try:
     # Getting the variables from `[general]`
+    mode: str = config.get('general', 'mode')
     log_level: str = config.get("general", "log_level")
     presence: str = config.get("general", "presence")
     owner_ids = config.get("general", "owner_ids").split(",")
@@ -50,11 +55,17 @@ try:
 
     # Getting the variables from `[secret]`
     discord_token: str = config.get("secret", "discord_token")
-    db_host: str = config.get("secret", "db_host")
-    db_port: int = config.getint("secret", "db_port")
-    db_user: str = config.get("secret", "db_user")
-    db_password: str = config.get("secret", "db_password")
-    db_name: str = config.get("secret", "db_name")
+    db1_host: str = config.get("secret", "db1_host")
+    db1_port: int = config.getint("secret", "db1_port")
+    db1_user: str = config.get("secret", "db1_user")
+    db1_password: str = config.get("secret", "db1_password")
+    db1_name: str = config.get("secret", "db1_name")
+
+    db2_host: str = config.get("secret", "db2_host")
+    db2_port: int = config.getint("secret", "db2_port")
+    db2_user: str = config.get("secret", "db2_user")
+    db2_password: str = config.get("secret", "db2_password")
+    db2_name: str = config.get("secret", "db2_name")
 
     # Getting the variables from `[discord]`
     embed_footer: str = config.get("discord", "embed_footer")
@@ -91,7 +102,9 @@ def error_template(description: str) -> discord.Embed:
     return _error_template.copy()
 
 
-db_creds: DbCreds = DbCreds(db_host, db_port, db_user, db_password, db_name)
+# db1 is onsite, db2 is offsite
+db1_creds = {'host': db1_host, 'port': db1_port, 'user': db1_user, 'password': db1_password, 'db': db1_name}
+db2_creds = {'host': db2_host, 'port': db2_port, 'user': db2_user, 'password': db2_password, 'db': db2_name}
 
 
 async def is_admin(interaction) -> bool:
@@ -119,7 +132,7 @@ class ConfirmButton(discord.ui.View):  # Confirm Button Class
 
     @discord.ui.button(label="Confirm", style=discord.ButtonStyle.red)
     async def confirm_callback(
-        self, interaction: discord.Interaction, button: discord.ui.Button
+            self, interaction: discord.Interaction, button: discord.ui.Button
     ):
         if not interaction.user.id == self.author.id:
             await interaction.response.send_message(
@@ -137,7 +150,7 @@ class ConfirmButton(discord.ui.View):  # Confirm Button Class
 
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.grey)
     async def cancel_callback(
-        self, interaction: discord.Interaction, button: discord.ui.Button
+            self, interaction: discord.Interaction, button: discord.ui.Button
     ):
         if not interaction.user.id == self.author.id:
             return await interaction.response.send_message(
@@ -149,5 +162,19 @@ class ConfirmButton(discord.ui.View):  # Confirm Button Class
         for child in self.children:
             child.disabled = True
 
-        await interaction.response.edit_original_message(view=self)
+        await interaction.response.edit_message(view=self)
         self.stop()
+
+
+def get_db_creds(offsite_or_onsite):
+
+    # insert data into onsite server
+    try:
+        if offsite_or_onsite == "onsite":
+            return db1_creds
+        else:
+            return db2_creds
+
+    except Exception as e:
+        print(e)
+

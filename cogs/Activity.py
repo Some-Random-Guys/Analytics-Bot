@@ -1,14 +1,13 @@
 import datetime
 import discord
 from discord.ext import commands
-from backend import log, db_creds, embed_template, error_template
+from backend import log, embed_template, error_template, get_db_creds
 from discord import app_commands
 from srg_analytics import (
-    activity_guild_visual,
     DB,
-    activity_user_visual,
     get_top_users_visual,
     get_top_users,
+    activity_server
 )
 import os
 
@@ -82,7 +81,7 @@ class Activity(commands.GroupCog, name="activity"):
     async def activity_server(self, interaction, timeperiod: app_commands.Choice[str]):
         await interaction.response.defer()
 
-        db = DB(db_creds)
+        db = DB(db_creds=get_db_creds('onsite'))
         await db.connect()
 
         timezone = await db.get_timezone(guild_id=interaction.guild.id)
@@ -93,8 +92,7 @@ class Activity(commands.GroupCog, name="activity"):
             datetime.timedelta(hours=int(timezone) if timezone else 3)
         )
 
-        e = await activity_guild_visual(
-            db=db,
+        e = await activity_server(
             guild_id=interaction.guild.id,
             timeperiod_or_daterange=timeperiod.value,
             timezone=timezone,
@@ -126,7 +124,7 @@ class Activity(commands.GroupCog, name="activity"):
     ):
         await interaction.response.defer()
 
-        db = DB(db_creds)
+        db = DB(db_creds=get_db_creds('onsite'))
         await db.connect()
 
         timezone = await db.get_timezone(guild_id=interaction.guild.id)
@@ -142,33 +140,33 @@ class Activity(commands.GroupCog, name="activity"):
             if user is not None
         ]
 
-        res = await activity_user_visual(
-            db=db,
-            guild_id=interaction.guild.id,
-            user_list=user_list,
-            timeperiod_or_daterange=timeperiod.value,
-            timezone=timezone,
-        )
+        # res = await activity_user_visual(
+        #     db=db,
+        #     guild_id=interaction.guild.id,
+        #     user_list=user_list,
+        #     timeperiod_or_daterange=timeperiod.value,
+        #     timezone=timezone,
+        # )
+        #
+        # if res is None:
+        #     embed = error_template(
+        #         "There was an error generating the graph. Please try again later."
+        #     )
+        #     await interaction.followup.send(embed=embed)
+        #     return
+        #
+        # embed = embed_template()
+        # embed.title = f"User Activity"
+        # embed.description = \
+        #     f"For users {' '.join([user.mention for user in [user_1, user_2, user_3, user_4, user_5] if user is not None])}\n" \
+        #     f"Showing activity for the {timeperiod.name}"
+        # embed.set_image(url="attachment://activity.png")
+        #
+        # await interaction.followup.send(
+        #     # embed=embed, file=discord.File(res, filename="activity.png")
+        # )
 
-        if res is None:
-            embed = error_template(
-                "There was an error generating the graph. Please try again later."
-            )
-            await interaction.followup.send(embed=embed)
-            return
-
-        embed = embed_template()
-        embed.title = f"User Activity"
-        embed.description = \
-            f"For users {' '.join([user.mention for user in [user_1, user_2, user_3, user_4, user_5] if user is not None])}\n" \
-            f"Showing activity for the {timeperiod.name}"
-        embed.set_image(url="attachment://activity.png")
-
-        await interaction.followup.send(
-            embed=embed, file=discord.File(res, filename="activity.png")
-        )
-
-        os.remove(res)
+        # os.remove(res)
 
     @app_commands.command(name="today")
     @app_commands.choices(
@@ -183,7 +181,7 @@ class Activity(commands.GroupCog, name="activity"):
     ):
         await interaction.response.defer()
 
-        db = DB(db_creds)
+        db = DB(db_creds=get_db_creds('onsite'))
         await db.connect()
 
         # get top users today
@@ -213,30 +211,29 @@ class Activity(commands.GroupCog, name="activity"):
 
             user_list.append((nick, user.id))
 
-        file = await activity_user_visual(
-            db=db,
-            guild_id=interaction.guild.id,
-            user_list=user_list,
-            time_period="1d",
-        )
-
-        embed = embed_template()
-        embed.title = f"Today's Activity"
-        embed.description = f"Showing top users by {category.value}"
-        embed.set_image(url="attachment://activity.png")
-
-        await interaction.followup.send(
-            embed=embed, file=discord.File(file, filename="activity.png")
-        )
-
-        # remove file
-        os.remove(file)
+        # file = await activity_user_visual(
+        #     db=db,
+        #     guild_id=interaction.guild.id,
+        #     user_list=user_list,
+        # )
+        #
+        # embed = embed_template()
+        # embed.title = f"Today's Activity"
+        # embed.description = f"Showing top users by {category.value}"
+        # embed.set_image(url="attachment://activity.png")
+        #
+        # await interaction.followup.send(
+        #     embed=embed, file=discord.File(file, filename="activity.png")
+        # )
+        #
+        # # remove file
+        # os.remove(file)
 
     @app_commands.command(name="serverpast")
     async def activity_serverpast(self, interaction, start_date: str, end_date: str):
         await interaction.response.defer()
 
-        db = DB(db_creds)
+        db = DB(db_creds=get_db_creds('onsite'))
         await db.connect()
 
         # Timezone logic
@@ -257,26 +254,26 @@ class Activity(commands.GroupCog, name="activity"):
         except AssertionError:
             await interaction.followup.send("Unknown error")  # TODO
             return
-
-        e = await activity_guild_visual(
-            db=db,
-            guild_id=interaction.guild.id,
-            timeperiod_or_daterange=dates,
-            timezone=timezone,
-        )
-
-        embed = embed_template()
-        embed.title = "Server Activity"
-        embed.description = \
-            f"For the guild `{interaction.guild.name}`\n" \
-            f"Showing activity from {start_date} to {end_date}"
-        embed.set_image(url="attachment://activity.png")
-
-        await interaction.followup.send(
-            embed=embed, file=discord.File(e, filename="activity.png")
-        )
-
-        os.remove(e)
+        #
+        # e = await activity_guild_visual(
+        #     db=db,
+        #     guild_id=interaction.guild.id,
+        #     timeperiod_or_daterange=dates,
+        #     timezone=timezone,
+        # )
+        #
+        # embed = embed_template()
+        # embed.title = "Server Activity"
+        # embed.description = \
+        #     f"For the guild `{interaction.guild.name}`\n" \
+        #     f"Showing activity from {start_date} to {end_date}"
+        # embed.set_image(url="attachment://activity.png")
+        #
+        # await interaction.followup.send(
+        #     embed=embed, file=discord.File(e, filename="activity.png")
+        # )
+        #
+        # os.remove(e)
 
     @app_commands.command(name="userpast")
     async def activity_userpast(
@@ -289,7 +286,7 @@ class Activity(commands.GroupCog, name="activity"):
     ):
         await interaction.response.defer()
 
-        db = DB(db_creds)
+        db = DB(db_creds=get_db_creds('onsite'))
         await db.connect()
 
         timezone = await db.get_timezone(guild_id=interaction.guild.id)
@@ -314,34 +311,34 @@ class Activity(commands.GroupCog, name="activity"):
         except AssertionError:
             await interaction.followup.send("Unknown error") #TODO
             return
-
-        res = await activity_user_visual(
-            db=db,
-            guild_id=interaction.guild.id,
-            user_list=user_list,
-            timeperiod_or_daterange=dates,
-            timezone=timezone,
-        )
-
-        if res is None:
-            embed = error_template(
-                "There was an error generating the graph. Please try again later."
-            )
-            await interaction.followup.send(embed=embed)
-            return
-
-        embed = embed_template()
-        embed.title = f"User Activity"
-        embed.description = \
-            f"For users {' '.join([user.mention for user in [user_1, user_2, user_3, user_4, user_5] if user is not None])}\n" \
-            f"Showing activity from {start_date} to {end_date}"
-        embed.set_image(url="attachment://activity.png")
-
-        await interaction.followup.send(
-            embed=embed, file=discord.File(res, filename="activity.png")
-        )
-
-        os.remove(res)
+        #
+        # res = await activity_user_visual(
+        #     db=db,
+        #     guild_id=interaction.guild.id,
+        #     user_list=user_list,
+        #     timeperiod_or_daterange=dates,
+        #     timezone=timezone,
+        # )
+        #
+        # if res is None:
+        #     embed = error_template(
+        #         "There was an error generating the graph. Please try again later."
+        #     )
+        #     await interaction.followup.send(embed=embed)
+        #     return
+        #
+        # embed = embed_template()
+        # embed.title = f"User Activity"
+        # embed.description = \
+        #     f"For users {' '.join([user.mention for user in [user_1, user_2, user_3, user_4, user_5] if user is not None])}\n" \
+        #     f"Showing activity from {start_date} to {end_date}"
+        # embed.set_image(url="attachment://activity.png")
+        #
+        # await interaction.followup.send(
+        #     embed=embed, file=discord.File(res, filename="activity.png")
+        # )
+        #
+        # os.remove(res)
 
 
 async def setup(client):
