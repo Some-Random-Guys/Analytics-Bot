@@ -43,10 +43,10 @@ async def build_profile(db: DB, guild_id: int, user_id: int) -> dict:
 
     return_dict = {
         'user_id': user_id, 'guild_id': guild_id,
-        'messages': await db.get_message_count(guild_id=guild_id, user_id=user_id),
-        'characters': await db.get_character_count(guild_id=guild_id, user_id=user_id),
-        'total_embeds': await get_total_embeds(db, guild_id, user_id),
-        'total_attachments': int(await get_total_attachments(db, guild_id, user_id))
+        'messages': await db.get_message_count(guild_id=guild_id, user_id=user_id) or 0,
+        'characters': await db.get_character_count(guild_id=guild_id, user_id=user_id) or 0,
+        'total_embeds': await get_total_embeds(db, guild_id, user_id) or 0,
+        'total_attachments': await get_total_attachments(db, guild_id, user_id) or 0
     }
 
     return_dict['average_message_length'] = return_dict['characters'] / (await get_notnull_message_count(db, guild_id, user_id) or 1)
