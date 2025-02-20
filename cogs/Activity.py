@@ -88,14 +88,41 @@ class Activity(commands.GroupCog, name="activity"):
         if not timezone:
             timezone = 3
 
-        timezone = datetime.timezone(
-            datetime.timedelta(hours=int(timezone) if timezone else 3)
-        )
+        match timeperiod.value:
+            case "1d":
+                start_date = datetime.datetime.now() - datetime.timedelta(days=1)
+                end_date = datetime.datetime.now()
+            case "1w":
+                start_date = datetime.datetime.now() - datetime.timedelta(weeks=1)
+                end_date = datetime.datetime.now()
+            case "2w":
+                start_date = datetime.datetime.now() - datetime.timedelta(weeks=2)
+                end_date = datetime.datetime.now()
+            case "1m":
+                start_date = datetime.datetime.now() - datetime.timedelta(weeks=4)
+                end_date = datetime.datetime.now()
+            case "6m":
+                start_date = datetime.datetime.now() - datetime.timedelta(weeks=24)
+                end_date = datetime.datetime.now()
+            case "1y":
+                start_date = datetime.datetime.now() - datetime.timedelta(weeks=52)
+                end_date = datetime.datetime.now()
+            case "2y":
+                start_date = datetime.datetime.now() - datetime.timedelta(weeks=104)
+                end_date = datetime.datetime.now()
+            case "5y":
+                start_date = datetime.datetime.now() - datetime.timedelta(weeks=260)
+                end_date = datetime.datetime.now()
+            case "all":
+                start_date = datetime.datetime.now() - datetime.timedelta(weeks=2600)
+                end_date = datetime.datetime.now()
+            case _:
+                return
 
         e = await activity_server(
-            guild_id=interaction.guild.id,
-            timeperiod_or_daterange=timeperiod.value,
-            timezone=timezone,
+            start_date=start_date,
+            end_date=end_date,
+            timezone_offset=timezone
         )
 
         embed = embed_template()
@@ -109,7 +136,6 @@ class Activity(commands.GroupCog, name="activity"):
             embed=embed, file=discord.File(e, filename="activity.png")
         )
 
-        os.remove(e)
 
     @app_commands.command(name="user")
     @app_commands.choices(timeperiod=timeperiod_choices)
@@ -130,8 +156,6 @@ class Activity(commands.GroupCog, name="activity"):
         timezone = await db.get_timezone(guild_id=interaction.guild.id)
         if not timezone:
             timezone = 3
-
-        timezone = datetime.timezone(datetime.timedelta(hours=int(timezone)))
 
         # user_list format - [(name, id), (name, id), (name, id), (name, id), (name, id)]
         user_list = [

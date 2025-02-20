@@ -50,7 +50,8 @@ class DB:
                     """
                     CREATE TABLE IF NOT EXISTS aliases (
                         guild_id BIGINT NOT NULL,
-                        user_id BIGINT NOT NULL
+                        user_id BIGINT NOT NULL,
+                        alias_id BIGINT NOT NULL
                     );
                     """
                 )
@@ -183,7 +184,7 @@ class DB:
         async with self.con.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
-                    "INSERT IGNORE INTO `config` (_key, data1, data2, data3) VALUES ('alias', %s, %s, %s);",
+                    "INSERT IGNORE INTO `aliases` (guild_id, user_id, alias_id) VALUES (%s, %s, %s);",
                     (guild_id, user_id, alias_id),
                 )
                 if update_existing:
@@ -196,7 +197,7 @@ class DB:
         async with self.con.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
-                    "DELETE FROM `config` WHERE _key = 'alias' AND data1 = %s AND data2 = %s AND data3 = %s;",
+                    "DELETE FROM `aliases` WHERE guild_id = %s AND user_id = %s AND alias_id = %s;",
                     (guild_id, user_id, alias_id),
                 )
                 if update_existing:
@@ -206,28 +207,26 @@ class DB:
                     )
 
     async def get_user_aliases(self, guild_id: int = None):
-        from collections import defaultdict
-        final_dict = defaultdict(lambda: {})
+        final_dict = {}
 
         async with self.con.acquire() as conn:
             async with conn.cursor() as cur:
-                # data1 is guild_id, data2 is user_id, data3 is alias_id
 
                 if guild_id is None:
                     await cur.execute(
-                        "SELECT data1, data2, data3 FROM `config` WHERE _key = 'alias';",
+                        f"SELECT guild_id, alias_id, user_id FROM `aliases`;",
                     )
 
                     res = await cur.fetchall()
 
-                    # { guild_id: {alias_id: user_id} }
+                    # { guild_id: {alias_id: user_id, ...}, ...}
                     for guild_id, user_id, alias_id in res:
-                        final_dict[alias_id]: user_id
+                        final_dict[guild_id][alias_id]: user_id
 
                 else:
                     await cur.execute(
-                        "SELECT data2, data3 FROM `config` WHERE _key = 'alias' AND data1 = %;",
-                        ()
+                        "SELECT alias_id, user_id FROM `aliases` WHERE guild_id = %s;",
+                        (guild_id,),
                     )
 
                     res = await cur.fetchall()
@@ -240,25 +239,16 @@ class DB:
 
     async def set_timezone(self, guild_id: int, timezone: int):
         # timezone here is an offset from UTC
-
-        if await self.execute(
-                f"SELECT data2 FROM `config` WHERE _key = 'timezone' AND data1 = '%s';",
-                (guild_id,), fetch="one"
-        ) is None:
-            await self.execute(
-                "INSERT INTO `config` (_key, data1, data2) VALUES ('timezone', %s, %s);",
-                (guild_id, timezone),
-            )
-            return
-
         await self.execute(
-            "UPDATE `config` SET data2 = %s WHERE _key = 'timezone' AND data1 = %s;",
+            "INSERT IGNORE INTO timezones (guild_id, timezone) VALUES (%s, %s);",
             (timezone, guild_id),
         )
 
     async def get_timezone(self, guild_id: int):
-        res = await self.execute(f"SELECT data2 FROM `config` WHERE _key = 'timezone' AND data1 = '%s';",
-                                 (guild_id,), fetch="one")
+        res = await self.execute(
+            "SELECT timezone FROM timezones WHERE guild_id = %s;",
+                    (guild_id,), fetch="one"
+        )
 
         if res is None:
             return None
