@@ -7,7 +7,7 @@ from srg_analytics import (
     DB,
     get_top_users_visual,
     get_top_users,
-    activity_server
+    activity_server, activity_user
 )
 import os
 
@@ -120,6 +120,7 @@ class Activity(commands.GroupCog, name="activity"):
                 return
 
         e = await activity_server(
+            server_id=interaction.guild.id,
             start_date=start_date,
             end_date=end_date,
             timezone_offset=timezone
@@ -157,40 +158,59 @@ class Activity(commands.GroupCog, name="activity"):
         if not timezone:
             timezone = 3
 
-        # user_list format - [(name, id), (name, id), (name, id), (name, id), (name, id)]
-        user_list = [
-            (user.nick if hasattr(user, 'nick') else user.display_name or user.name, user.id)
-            for user in [user_1, user_2, user_3, user_4, user_5]
-            if user is not None
-        ]
+        match timeperiod.value:
+            case "1d":
+                start_date = datetime.datetime.now() - datetime.timedelta(days=1)
+                end_date = datetime.datetime.now()
+            case "1w":
+                start_date = datetime.datetime.now() - datetime.timedelta(weeks=1)
+                end_date = datetime.datetime.now()
+            case "2w":
+                start_date = datetime.datetime.now() - datetime.timedelta(weeks=2)
+                end_date = datetime.datetime.now()
+            case "1m":
+                start_date = datetime.datetime.now() - datetime.timedelta(weeks=4)
+                end_date = datetime.datetime.now()
+            case "6m":
+                start_date = datetime.datetime.now() - datetime.timedelta(weeks=24)
+                end_date = datetime.datetime.now()
+            case "1y":
+                start_date = datetime.datetime.now() - datetime.timedelta(weeks=52)
+                end_date = datetime.datetime.now()
+            case "2y":
+                start_date = datetime.datetime.now() - datetime.timedelta(weeks=104)
+                end_date = datetime.datetime.now()
+            case "5y":
+                start_date = datetime.datetime.now() - datetime.timedelta(weeks=260)
+                end_date = datetime.datetime.now()
+            case "all":
+                start_date = datetime.datetime.now() - datetime.timedelta(weeks=2600)
+                end_date = datetime.datetime.now()
+            case _:
+                return
 
-        # res = await activity_user_visual(
-        #     db=db,
-        #     guild_id=interaction.guild.id,
-        #     user_list=user_list,
-        #     timeperiod_or_daterange=timeperiod.value,
-        #     timezone=timezone,
-        # )
-        #
-        # if res is None:
-        #     embed = error_template(
-        #         "There was an error generating the graph. Please try again later."
-        #     )
-        #     await interaction.followup.send(embed=embed)
-        #     return
-        #
-        # embed = embed_template()
-        # embed.title = f"User Activity"
-        # embed.description = \
-        #     f"For users {' '.join([user.mention for user in [user_1, user_2, user_3, user_4, user_5] if user is not None])}\n" \
-        #     f"Showing activity for the {timeperiod.name}"
-        # embed.set_image(url="attachment://activity.png")
-        #
-        # await interaction.followup.send(
-        #     # embed=embed, file=discord.File(res, filename="activity.png")
-        # )
+        user_ids = [user.id for user in [user_1, user_2, user_3, user_4, user_5] if hasattr(user, 'id')]
+        user_nicknames = [user.display_name for user in [user_1, user_2, user_3, user_4, user_5] if user is not None][:len(user_ids)]
 
-        # os.remove(res)
+        e = await activity_user(
+            server_id=interaction.guild.id,
+            user_ids=user_ids,
+            user_nicknames=user_nicknames,
+            start_date=start_date,
+            end_date=end_date,
+            timezone_offset=timezone
+        )
+
+        embed = embed_template()
+        embed.title = "User Activity"
+        embed.description = \
+            f"For the guild `{interaction.guild.name}`\n" \
+            f"Showing activity for the {timeperiod.name}"
+        embed.set_image(url="attachment://activity.png")
+
+        await interaction.followup.send(
+            embed=embed, file=discord.File(e, filename="activity.png")
+        )
 
     @app_commands.command(name="today")
     @app_commands.choices(

@@ -59,7 +59,7 @@ class Admin(commands.Cog, name="admin"):
         guild = interaction.guild
 
         for channel in guild.channels:
-            # guild.channel contains:
+            # guild.channel superclasses:
             # TextChannel, VoiceChannel, CategoryChannel, StageChannel, ForumChannel
             print(channel)
 
